@@ -88,24 +88,43 @@ const COMPANY_PROFILE_SCHEMA = {
 const DEFAULT_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema) {
-  if (!env.Yoo || typeof env.Yoo.run !== "function") {
+  let result;
+  if (env.Yoo && typeof env.Yoo.run === "function") {
+    const model = env.Yoo_MODEL || DEFAULT_AI_MODEL;
+    result = await env.Yoo.run(model, {
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_schema", json_schema: schema },
+      max_tokens: 1800,
+      temperature: 0.2,
+    });
+  } else if (env.OPENAI_API_KEY) {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 1800,
+        temperature: 0.2,
+      }),
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 400);
+      throw new Error(`OpenAI request failed (${response.status}): ${detail}`);
+    }
+    result = await response.json();
+  } else {
     const error = new Error("ai_not_configured");
     error.code = "ai_not_configured";
     throw error;
   }
-  const model = env.Yoo_MODEL || DEFAULT_AI_MODEL;
-  const result = await env.Yoo.run(model, {
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: schema,
-    },
-    max_tokens: 1800,
-    temperature: 0.2,
-  });
   const content = result?.response ?? result?.choices?.[0]?.message?.content;
   if (typeof content === "string") {
     try { return JSON.parse(content); }
