@@ -251,12 +251,12 @@ function eventsStream(env, headers, request) {
             send(sseEvent(event));
           }
           if (Date.now() - lastKeepalive >= 15000) {
-            send(": keepalive\\n\\n");
+            send(": keepalive\n\n");
             lastKeepalive = Date.now();
           }
         }
       } catch {
-        send(`event: error\\ndata: ${JSON.stringify({ error: "event_stream_unavailable" })}\\n\\n`);
+        send(`event: error\ndata: ${JSON.stringify({ error: "event_stream_unavailable" })}\n\n`);
         if (!cancelled) controller.close();
       }
     },
