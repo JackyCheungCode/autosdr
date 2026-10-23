@@ -47,7 +47,7 @@ Set `FRONTEND_ORIGIN` in `cloudflare/worker/wrangler.jsonc` to the exact Pages o
 npx wrangler deploy --config wrangler.jsonc
 ```
 
-The Worker requires the shared `API_PROXY_TOKEN` from the Pages Function for API access. Supabase-backed routes include `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, `/api/leads/:id`, `POST /api/settings/approval`, and `POST /api/outbox/:id/reject`. ICP generation is available through `POST /api/icp` when `company_profile` exists and `OPENAI_API_KEY` plus `OPENAI_MODEL` are configured as Worker secrets/variables; optionally set `OPENAI_BASE_URL` for an OpenAI-compatible endpoint. Configure the LLM key with `npx wrangler secret put OPENAI_API_KEY --config wrangler.jsonc` and set `OPENAI_MODEL` in Worker variables. Health performs a real database query. These routes require the migration to be applied and server-side secrets to be configured. Email sending for `POST /api/outbox/:id/approve` intentionally remains disabled (501); company upload/text, pipeline run/stop, reply simulation, booking actions, SSE, scheduler, and report/booking pages are not migrated and return explicit 501 for unported `/api/*` paths.
+The Worker requires the shared `API_PROXY_TOKEN` from the Pages Function for API access. Supabase-backed routes include `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, `/api/leads/:id`, `POST /api/settings/approval`, and `POST /api/outbox/:id/reject`. ICP generation is available through `POST /api/icp` when `company_profile` exists and `OPENAI_API_KEY` plus `OPENAI_MODEL` are configured as Worker secrets/variables; optionally set `OPENAI_BASE_URL` for an OpenAI-compatible endpoint. Configure the LLM key with `npx wrangler secret put OPENAI_API_KEY --config wrangler.jsonc` and set `OPENAI_MODEL` in Worker variables. Health performs a real database query. These routes require the migration to be applied and server-side secrets to be configured. Email sending for `POST /api/outbox/:id/approve` intentionally remains disabled (501); company upload/PDF parsing, pipeline run/stop, reply simulation, booking actions, scheduler, and report/booking pages are not migrated. `GET /api/events/stream` provides a read-only Supabase-backed SSE stream that replays recent events and polls for new rows every 3 seconds; it is not the original in-process event bus and return explicit 501 for unported `/api/*` paths.
 
 ## 3. Pages static frontend
 
@@ -67,7 +67,7 @@ The existing frontend calls FastAPI routes directly. The read-only dashboard end
 
 - Only a read-only subset of FastAPI routes has been ported; no pipeline or outreach mutations are implemented in Worker.
 - The Python/FastAPI code now has a dual SQLite/PostgreSQL adapter; it has not been verified against a live Supabase project. The JavaScript Worker still does not serve the FastAPI business routes.
-- Scheduler, IMAP, PDF/RAG, booking, and SSE migration remain open.
+- Scheduler, IMAP, PDF/RAG, and booking migration remain open. SSE is only partially ported as a read-only Supabase-backed stream; end-to-end event production and live database behavior still need integration testing.
 - No production deployment has been performed from this repository.\n- The proxy token protects direct Worker calls; it does not replace end-user authentication. Cloudflare Access is required in front of Pages before exposing non-demo data.
 
 
