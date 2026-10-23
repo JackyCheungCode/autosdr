@@ -88,8 +88,8 @@ def _connect_postgres():
         dsn = "postgresql://" + dsn[len("postgres://"):]
     if "sslmode=" not in dsn:
         dsn += ("&" if "?" in dsn else "?") + "sslmode=require"
-    # Autocommit keeps standalone SELECTs from leaving a shared connection in
-    # an open transaction. tx() explicitly brackets multi-statement writes.
+    # Use normal transactions: tx() commits writes atomically, while rows()/one()
+    # commit their standalone read transaction before returning.
     connection = psycopg.connect(dsn, row_factory=dict_row)
     try:
         with connection.cursor() as cur:
@@ -231,19 +231,29 @@ def update(table: str, id_: str, fields: dict):
 def rows(sql: str, args: tuple = ()) -> list[dict]:
     with _lock:
         connection = conn()
-        result = [dict(r) for r in _execute(connection, sql, args).fetchall()]
-        if DATABASE_URL:
-            connection.commit()
-        return result
+        try:
+            result = [dict(r) for r in _execute(connection, sql, args).fetchall()]
+            if DATABASE_URL:
+                connection.commit()
+            return result
+        except Exception:
+            if DATABASE_URL:
+                connection.rollback()
+            raise
 
 
 def one(sql: str, args: tuple = ()) -> dict | None:
     with _lock:
         connection = conn()
-        row = _execute(connection, sql, args).fetchone()
-        if DATABASE_URL:
-            connection.commit()
-        return dict(row) if row else None
+        try:
+            row = _execute(connection, sql, args).fetchone()
+            if DATABASE_URL:
+                connection.commit()
+            return dict(row) if row else None
+        except Exception:
+            if DATABASE_URL:
+                connection.rollback()
+            raise
 
 
 def kv_get(k: str, default=None):
