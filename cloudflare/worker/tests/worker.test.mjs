@@ -280,3 +280,58 @@ test("approve draft remains disabled until email delivery is safely ported", asy
   assert.equal(response.status, 501);
   assert.equal((await response.json()).error, "not_implemented");
 });
+
+
+test("ICP generation fails closed when LLM credentials are not configured", async () => {
+  const response = await worker.fetch(request("/api/icp", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ location: "Germany", industry: "manufacturing" }),
+  }), configuredEnv);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "company_profile_required");
+});
+
+test("ICP generation uses configured LLM and persists the structured result", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const expectedIcp = {
+    location: "Germany",
+    industries: ["manufacturing"],
+    company_size: "50-500 employees",
+    special_targeting: "exporters",
+    must_have: ["B2B website"],
+    disqualifiers: ["consumer-only"],
+    search_queries: ["German industrial exporters"],
+    scoring_hints: ["clear export activity"],
+  };
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    calls.push({ url, method: init.method || "GET", body: init.body ? JSON.parse(init.body) : null });
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/kv") && (init.method || "GET") === "GET") {
+      return Response.json([{ v: JSON.stringify({ company_name: "Example Co", services: [{ name: "Export consulting" }], what_we_sell: "Consulting" }) }]);
+    }
+    if (url.hostname === "api.openai.com") {
+      return Response.json({ choices: [{ message: { content: JSON.stringify(expectedIcp) } }] });
+    }
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/kv") && init.method === "POST") {
+      assert.match(new Headers(init.headers).get("prefer"), /resolution=merge-duplicates/);
+      return Response.json([{ k: "icp", v: JSON.stringify(expectedIcp) }]);
+    }
+    throw new Error("Unexpected mocked fetch: " + url.toString());
+  };
+  try {
+    const env = { ...configuredEnv, OPENAI_API_KEY: "test-llm-key", OPENAI_MODEL: "test-model" };
+    const response = await worker.fetch(request("/api/icp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ location: "Germany", industry: "manufacturing", size: "50-500 employees", targeting: "exporters" }),
+    }), env);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).icp, expectedIcp);
+    assert.equal(calls.some(call => call.url.hostname === "api.openai.com"), true);
+    assert.equal(calls.some(call => call.method === "POST" && call.url.hostname === "example.supabase.co"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
