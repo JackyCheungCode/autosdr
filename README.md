@@ -154,3 +154,9 @@ API / Twilio / CallMeBot (live WhatsApp).
 | WhatsApp | ✅ real via Green API / Twilio / CallMeBot when configured | in-app panel, badged SIM |
 | Meeting links | ✅ real Jitsi rooms + in-app booking page | — |
 | Follow-up / reminder timing | ✅ real scheduler | time-scaled by demo clock |
+
+## Cloudflare + Supabase migration (preview)
+
+An isolated migration scaffold is being developed on the `cloudflare-supabase` branch; the original `main` branch is unchanged. Start with [the migration status and compatibility gates](cloudflare/compatibility/README.md) and [the staging deployment guide](cloudflare/DEPLOY.md).
+
+**Important:** the Cloudflare Worker currently provides only a health/bootstrap endpoint. Business API routes, the PostgreSQL adapter, scheduler, PDF/RAG pipeline, and SSE trace have not been ported. Do not treat this branch as production-ready or deploy it against production data.
