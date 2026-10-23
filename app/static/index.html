@@ -686,14 +686,42 @@ function renderProfile(){
   if(iv) iv.innerHTML=i?`<div class="hint">${esc(i.industries.join(", "))} · ${esc(i.location)} · ${esc(i.company_size)}</div>`:"<div class='hint'>Not set.</div>";
   if(p&&$("w3summary")&&STATE.icp) $("w3summary").textContent=`AutoSDR will hunt ${STATE.icp.industries.slice(0,3).join(", ")} for ${p.company_name} — search, filter, research, qualify, match, outreach — hands-free.`;
 }
-async function runPipeline(){
-  const fd=new FormData(); fd.append("max_leads",$("maxleads")?.value||5);
-  const sn=$("sendername")?.value?.trim(); if(sn) fd.append("sender_name",sn);
-  const r=await fetch("/api/run",{method:"POST",body:fd});
-  toast(r.ok?"<b>Autonomous run started</b>":"Finish setup first — company document and ICP");
-  if(r.ok) showTab("pipeline");
+async function readApiResponse(r){
+  const raw=await r.text();
+  let data={}; try{data=raw?JSON.parse(raw):{};}catch{}
+  return {data,raw};
 }
-async function stopPipeline(){await fetch("/api/stop",{method:"POST"});toast("Stop requested — finishing current lead");}
+async function runPipeline(){
+  const button=document.querySelector('#toolbar button.primary');
+  if(button){button.disabled=true;button.textContent="Starting…";}
+  try{
+    toast("<b>正在启动</b>：正在检查设置并请求启动任务…");
+    const fd=new FormData(); fd.append("max_leads",$("maxleads")?.value||5);
+    const sn=$("sendername")?.value?.trim(); if(sn) fd.append("sender_name",sn);
+    const r=await fetch("/api/run",{method:"POST",body:fd});
+    const {data,raw}=await readApiResponse(r);
+    if(!r.ok){
+      const reason=data.detail||data.message||data.error||raw||("HTTP "+r.status);
+      toast("<b>启动失败（"+r.status+"）</b>："+esc(String(reason).slice(0,220)));
+      log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">启动失败</span><div>'+esc(String(reason).slice(0,500))+'</div></div>');
+      showTab("pipeline"); return;
+    }
+    toast("<b>启动请求已接受</b>：请查看 Agent Activity 的新日志。");
+    showTab("pipeline");
+  }catch(e){
+    const reason=e?.message||"网络连接失败";
+    toast("<b>无法连接服务器</b>："+esc(reason));
+    log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">网络错误</span><div>'+esc(reason)+'</div></div>');
+  }finally{if(button){button.disabled=false;button.innerHTML='<svg class="ic" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>Run';}}
+}
+async function stopPipeline(){
+  try{
+    const r=await fetch("/api/stop",{method:"POST"});
+    const {data,raw}=await readApiResponse(r);
+    if(!r.ok) throw new Error(data.error||raw||("HTTP "+r.status));
+    toast("<b>已发送停止请求</b>："+esc(data.message||"系统会按当前任务逻辑停止"));
+  }catch(e){toast("<b>停止失败</b>："+esc(e?.message||"网络错误"));}
+}
 
 async function openDrawer(id){
   const body=$("d-body");
@@ -871,8 +899,20 @@ function evtLine(e){
   return div;
 }
 const es=new EventSource("/api/events/stream");
+let streamErrorShown=false;
+es.onopen=()=>{streamErrorShown=false;};
+es.onerror=()=>{
+  if(streamErrorShown)return;
+  streamErrorShown=true;
+  $("runstate").querySelector(".dot").className="dot warn";
+  $("runtext").textContent="日志连接中断";
+  log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">日志连接中断</span><div>无法接收实时活动记录。请检查网络或刷新页面；这不代表任务已成功。</div></div>');
+};
+es.addEventListener("error",m=>{
+  if(m.data){try{const d=JSON.parse(m.data);log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">日志服务错误</span><div>'+esc(d.error||"日志流不可用")+'</div></div>');}catch{}}
+});
 es.onmessage=m=>{
-  const e=JSON.parse(m.data);
+  let e; try{e=JSON.parse(m.data);}catch{return;}
   if(e.seq!==undefined){ if(e.seq<=lastSeq) return; lastSeq=e.seq; }
   log.appendChild(evtLine(e));
   while(log.children.length>400) log.removeChild(log.firstChild);
