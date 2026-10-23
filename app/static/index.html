@@ -11,6 +11,39 @@
     const a=localStorage.getItem("autosdr_accent");
     document.documentElement.dataset.accent=["blue","violet","green","orange"].includes(a)?a:"blue";
   })();
+
+/* Chinese interface strings; business data and company names remain untouched. */
+const ZH_MAP = {
+"Pipeline":"客户开发","Approvals":"审核中心","Memory":"客户记忆","Settings":"设置","Appearance":"外观","Mode":"模式","Accent":"强调色","Dark":"深色","Light":"浅色",
+"Run":"开始客户开发","Stop":"停止任务","Trace":"运行日志","Review outreach":"开发信人工审核","Agent activity":"智能体活动","Agent Activity":"智能体活动",
+"Add your company knowledge":"填写公司资料","Upload company PDF":"上传公司资料 PDF","or paste text":"或直接粘贴文字","Continue":"继续","Define the ideal customer":"设置目标客户画像",
+"Target location":"目标国家/地区","Industry / market":"行业/市场","Company size / criteria":"企业规模/筛选条件","Special targeting":"特殊目标特征","Launch":"启动任务","Your name — signs the outreach emails":"发件人姓名（用于开发信署名）",
+"Leads to deep-process this run":"本次处理线索数量","Governance":"发送管理","Queue outreach for human approval":"开发信先进入审核中心","Launch autonomous run":"开始客户开发",
+"Search leads":"搜索客户线索","Min score":"最低评分","Discovered":"已发现","Potential":"待评估","Researching":"研究中","Qualified":"合格客户","Contacted":"已联系","Interested":"有兴趣","Meeting scheduled":"已预约会议","Converted":"已转化","Not qualified":"不合格","Not interested":"无兴趣","Do not contact":"禁止联系",
+"Short-term memory":"短期记忆","Long-term memory":"长期记忆","Live working state — the current task and each agent's scratch context.":"当前任务及各智能体的临时工作状态。","Durable relationship facts: research, scores, emails, replies, objections, meetings.":"长期保存的客户研究、评分、邮件、回复、异议和会议记录。",
+"Company knowledge":"公司资料","Replace — upload PDF":"替换公司资料 PDF","Replace — paste text":"替换公司资料文字","Ingest":"保存公司资料","Ideal customer profile":"目标客户画像","Location":"国家/地区","Industry":"行业","Size":"企业规模","Targeting":"目标特征","Rebuild ICP":"重新生成客户画像",
+"Overview":"概览","Research":"研究证据","Conversation":"沟通记录","Schedule":"跟进计划","Report":"客户报告","Advance":"推进阶段","Clear":"清空","All":"全部","Decisions":"决策","Comms":"沟通","Errors":"错误",
+"Empty.":"暂无内容","No drafts waiting":"暂无待审核邮件","Review mode is on — new outreach will queue here for sign-off.":"人工审核已开启，新开发信会进入此页面等待审核。",
+"Review mode is off — outreach sends autonomously. Turn on “Review outreach” in the toolbar to approve each email first.":"人工审核已关闭。开启工具栏的“开发信人工审核”后，邮件才会先等待审核。",
+"Outreach waiting for sign-off. Approving sends the real email.":"以下开发信等待审核。批准后将发送真实邮件。","Approve & send":"审核并发送","Reject":"拒绝",
+"Add the company document first":"请先填写公司资料","Building knowledge base — about a minute…":"正在生成公司知识库，预计约一分钟…","Ingesting document…":"正在导入公司资料…","Ingesting text…":"正在保存公司资料…",
+"Company profile built":"公司资料已生成","ICP ready":"客户画像已生成","Structuring ICP…":"正在生成客户画像…","Paste a description first":"请先填写公司介绍",
+"Starting…":"正在启动…","Starting":"正在启动","idle":"空闲","Search completed":"搜索完成","Empty":"暂无内容","Nothing yet — Advance runs this lead through research, scoring and outreach.":"暂无数据。推进客户应依次执行研究、评分和联系流程。",
+"Email sending is not yet available in this deployment; the draft remains pending.":"当前版本尚未接通邮件发送，草稿仍保留在待审核状态。",
+"Approve failed":"审核失败","Draft rejected":"已拒绝草稿","Stop failed":"停止任务失败","Network error":"网络错误","Network connection failed":"网络连接失败",
+"email":"邮件","whatsapp":"WhatsApp","leads":"条线索","qualified":"合格客户","avg score":"平均评分","emails":"邮件","replies":"回复","meetings":"会议","spend":"费用","live":"实时发送",
+"Step 1 of 3":"第 1 步，共 3 步","Step 2 of 3":"第 2 步，共 3 步","Step 3 of 3":"第 3 步，共 3 步","Welcome":"欢迎使用",
+"Top":"顶部","No company ingested yet.":"尚未填写公司资料。","Not set.":"尚未设置。","Empty.":"暂无内容","Score":"评分","qualified":"合格"
+};
+function translateStaticUi(){
+ const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+ const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
+ for(const n of nodes){const raw=n.nodeValue.trim();if(!raw)continue;if(ZH_MAP[raw])n.nodeValue=n.nodeValue.replace(raw,ZH_MAP[raw]);}
+ document.querySelectorAll("input[placeholder],textarea[placeholder],button[title],div[title]").forEach(el=>{
+  for(const attr of ["placeholder","title"]){const v=el.getAttribute(attr);if(v&&ZH_MAP[v])el.setAttribute(attr,ZH_MAP[v]);}
+ });
+}
+
 </script>
 <style>
   :root{
@@ -290,6 +323,59 @@
     .factor .fn{width:104px}
     .wizard{padding:24px 20px}
     .page{padding:14px}
+  }
+
+
+  /* Carbon-inspired controls and responsive workflow layout */
+  :root{--cds-interactive:#0f62fe;--cds-focus:#0f62fe;--cds-border:#8d8d8d;--cds-text:#161616;--cds-layer:#fff;--cds-hover:#e8e8e8}
+  body{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif}
+  button,input,textarea,select{font:inherit}
+  button{min-height:40px;border-radius:0!important;font-weight:400}
+  input,textarea,select{border-radius:0!important;min-height:40px;border:0!important;border-bottom:1px solid var(--cds-border)!important;background:var(--cds-layer)!important;color:var(--cds-text)!important;padding:10px 12px!important}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--cds-focus)!important;outline-offset:-2px}
+  .primary{background:#0f62fe!important;color:#fff!important;border:0!important}
+  .primary:hover{background:#0353e9!important}
+  .ghost,.subtle-danger{border:1px solid #8d8d8d!important;border-radius:0!important}
+  .country-picker{position:relative;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px;width:100%;margin:4px 0 12px}
+  .country-picker input{width:100%;min-width:0;box-sizing:border-box}
+  .country-menu{display:none;position:absolute;z-index:9999;top:42px;left:0;width:100%;max-height:260px;overflow:auto;background:#fff;color:#161616;border:1px solid #8d8d8d;box-shadow:0 4px 12px #0003}
+  .country-menu.open{display:block}
+  .country-option{display:block;width:100%;text-align:left;padding:10px 12px;border:0!important;background:#fff;color:#161616;min-height:36px}
+  .country-option:hover,.country-option:focus{background:#e8e8e8!important;outline:2px solid #0f62fe}
+  .region-wrap{min-width:0}
+  .region-hint{font-size:12px;color:#525252;margin:2px 0 6px}
+  .section-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  .flow-step{border-top:4px solid #0f62fe;padding:12px;background:#f4f4f4;color:#161616;min-width:0}
+  .flow-step b{display:block;margin-bottom:6px}
+  @media(max-width:700px){
+    body{overflow-x:hidden}
+    #wrap{min-width:0;width:100%;max-width:100vw}
+    #toolbar{position:sticky;top:0;z-index:30;background:var(--bg)}
+    #toolbar .spacer{display:none}
+    #toolbar button{flex:1;min-width:0}
+    #toolbar #tracebtn{flex:0 0 auto}
+    #main{display:block!important;min-width:0;width:100%;overflow-x:hidden}
+    #view{width:100%;min-width:0;overflow-x:hidden}
+    #trace{display:none!important}
+    #main.trace-open #view{display:none}
+    #main.trace-open #trace{display:flex!important;width:100%;min-width:0}
+    #board{grid-template-columns:1fr!important;overflow-x:hidden}
+    .col{max-height:none!important;min-height:90px}
+    .col .cards{max-height:320px}
+    #drawer{width:100vw!important;max-width:100vw!important;left:0!important;right:0!important}
+    #drawer .toprow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:start}
+    #d-name{font-size:18px;line-height:1.35;overflow-wrap:anywhere;word-break:break-word}
+    #drawer .toprow button{min-height:36px;padding:6px 10px}
+    #drawer .dtabs{display:flex;gap:0;overflow-x:auto;white-space:nowrap}
+    #drawer .dtabs button{flex:0 0 auto;padding:12px 14px}
+    .wizard{padding:18px 14px!important}
+    .row{grid-template-columns:1fr!important}
+    .country-picker{grid-template-columns:1fr}
+    .country-menu{top:42px}
+    .section-flow{grid-template-columns:1fr}
+    .page{padding:12px}
+    #stats{display:flex;overflow-x:auto;max-width:100%;margin:8px 10px 0}
+    .stat{flex:0 0 105px}
   }
 
 </style>
@@ -940,6 +1026,48 @@ $("board").addEventListener("scroll",()=>{lastBoardTouch=Date.now();},{passive:t
 refresh();
 setInterval(refresh,7000);
 setInterval(()=>{if(!$("memorypane").classList.contains("hidden"))loadMemory()},4000);
+</script>
+
+<script>
+/* Country and region selector: self-rendered Carbon-style menu, no native select popup. */
+const COUNTRY_DATA = `阿富汗|阿尔巴尼亚|阿尔及利亚|安道尔|安哥拉|安提瓜和巴布达|阿根廷|亚美尼亚|澳大利亚|奥地利|阿塞拜疆|巴哈马|巴林|孟加拉国|巴巴多斯|白俄罗斯|比利时|伯利兹|贝宁|不丹|玻利维亚|波斯尼亚和黑塞哥维那|博茨瓦纳|巴西|文莱|保加利亚|布基纳法索|布隆迪|佛得角|柬埔寨|喀麦隆|加拿大|中非共和国|乍得|智利|中国|中国台湾|哥伦比亚|科摩罗|刚果（布）|刚果（金）|哥斯达黎加|科特迪瓦|克罗地亚|古巴|塞浦路斯|捷克|丹麦|吉布提|多米尼克|多米尼加|厄瓜多尔|埃及|萨尔瓦多|赤道几内亚|厄立特里亚|爱沙尼亚|埃斯瓦蒂尼|埃塞俄比亚|斐济|芬兰|法国|加蓬|冈比亚|格鲁吉亚|德国|加纳|希腊|格林纳达|危地马拉|几内亚|几内亚比绍|圭亚那|海地|洪都拉斯|匈牙利|冰岛|印度|印度尼西亚|伊朗|伊拉克|爱尔兰|以色列|意大利|牙买加|日本|约旦|哈萨克斯坦|肯尼亚|基里巴斯|朝鲜|韩国|科威特|吉尔吉斯斯坦|老挝|拉脱维亚|黎巴嫩|莱索托|利比里亚|利比亚|列支敦士登|立陶宛|卢森堡|马达加斯加|马拉维|马来西亚|马尔代夫|马里|马耳他|马绍尔群岛|毛里塔尼亚|毛里求斯|墨西哥|密克罗尼西亚|摩尔多瓦|摩纳哥|蒙古|黑山|摩洛哥|莫桑比克|缅甸|纳米比亚|瑙鲁|尼泊尔|荷兰|新西兰|尼加拉瓜|尼日尔|尼日利亚|北马其顿|挪威|阿曼|巴基斯坦|帕劳|巴勒斯坦|巴拿马|巴布亚新几内亚|巴拉圭|秘鲁|菲律宾|波兰|葡萄牙|卡塔尔|罗马尼亚|俄罗斯|卢旺达|圣基茨和尼维斯|圣卢西亚|圣文森特和格林纳丁斯|萨摩亚|圣马力诺|圣多美和普林西比|沙特阿拉伯|塞内加尔|塞尔维亚|塞舌尔|塞拉利昂|新加坡|斯洛伐克|斯洛文尼亚|所罗门群岛|索马里|南非|南苏丹|西班牙|斯里兰卡|苏丹|苏里南|瑞典|瑞士|叙利亚|塔吉克斯坦|坦桑尼亚|泰国|东帝汶|多哥|汤加|特立尼达和多巴哥|突尼斯|土耳其|土库曼斯坦|图瓦卢|乌干达|乌克兰|阿联酋|英国|美国|乌拉圭|乌兹别克斯坦|瓦努阿图|梵蒂冈|委内瑞拉|越南|也门|赞比亚|津巴布韦|科索沃|库克群岛|纽埃|台湾以外的其他地区`.split("|");
+const REGION_DATA={
+"中国":"北京市|天津市|河北省|山西省|内蒙古自治区|辽宁省|吉林省|黑龙江省|上海市|江苏省|浙江省|安徽省|福建省|江西省|山东省|河南省|湖北省|湖南省|广东省|广西壮族自治区|海南省|重庆市|四川省|贵州省|云南省|西藏自治区|陕西省|甘肃省|青海省|宁夏回族自治区|新疆维吾尔自治区|香港特别行政区|澳门特别行政区".split("|"),
+"美国":"阿拉巴马州|阿拉斯加州|亚利桑那州|阿肯色州|加利福尼亚州|科罗拉多州|康涅狄格州|特拉华州|佛罗里达州|佐治亚州|夏威夷州|爱达荷州|伊利诺伊州|印第安纳州|艾奥瓦州|堪萨斯州|肯塔基州|路易斯安那州|缅因州|马里兰州|马萨诸塞州|密歇根州|明尼苏达州|密西西比州|密苏里州|蒙大拿州|内布拉斯加州|内华达州|新罕布什尔州|新泽西州|新墨西哥州|纽约州|北卡罗来纳州|北达科他州|俄亥俄州|俄克拉荷马州|俄勒冈州|宾夕法尼亚州|罗得岛州|南卡罗来纳州|南达科他州|田纳西州|德克萨斯州|犹他州|佛蒙特州|弗吉尼亚州|华盛顿州|西弗吉尼亚州|威斯康星州|怀俄明州|华盛顿特区".split("|"),
+"加拿大":"阿尔伯塔省|不列颠哥伦比亚省|曼尼托巴省|新不伦瑞克省|纽芬兰与拉布拉多省|新斯科舍省|安大略省|爱德华王子岛省|魁北克省|萨斯喀彻温省|西北地区|努纳武特地区|育空地区".split("|"),
+"印度":"安得拉邦|阿鲁纳恰尔邦|阿萨姆邦|比哈尔邦|恰蒂斯加尔邦|果阿邦|古吉拉特邦|哈里亚纳邦|喜马偕尔邦|贾坎德邦|卡纳塔克邦|喀拉拉邦|中央邦|马哈拉施特拉邦|曼尼普尔邦|梅加拉亚邦|米佐拉姆邦|那加兰邦|奥里萨邦|旁遮普邦|拉贾斯坦邦|锡金邦|泰米尔纳德邦|特伦甘纳邦|特里普拉邦|北方邦|北阿坎德邦|西孟加拉邦|德里".split("|"),
+"澳大利亚":"新南威尔士州|维多利亚州|昆士兰州|西澳大利亚州|南澳大利亚州|塔斯马尼亚州|北领地|澳大利亚首都领地".split("|"),
+"英国":"英格兰|苏格兰|威尔士|北爱尔兰".split("|"),
+"波兰":"下西里西亚省|库亚维-波美拉尼亚省|卢布林省|卢布斯卡省|罗兹省|小波兰省|马佐夫舍省|奥波莱省|喀尔巴阡山省|波德拉谢省|滨海省|西里西亚省|圣十字省|瓦尔米亚-马祖里省|大波兰省|西滨海省".split("|"),
+"德国":"巴登-符腾堡州|巴伐利亚州|柏林|勃兰登堡州|不来梅州|汉堡|黑森州|梅克伦堡-前波美拉尼亚州|下萨克森州|北莱茵-威斯特法伦州|莱茵兰-普法尔茨州|萨尔州|萨克森州|萨克森-安哈尔特州|石勒苏益格-荷尔斯泰因州|图林根州".split("|")
+};
+function mountCountryPicker(id){
+ const hidden=$(id);if(!hidden||hidden.dataset.countryPicker)return;hidden.dataset.countryPicker="1";
+ const host=document.createElement("div");host.className="country-picker";
+ const country=document.createElement("input");country.type="text";country.placeholder="搜索并选择国家/地区";country.setAttribute("aria-label","搜索并选择国家/地区");country.autocomplete="off";
+ const menu=document.createElement("div");menu.className="country-menu";menu.setAttribute("role","listbox");
+ const regionWrap=document.createElement("div");regionWrap.className="region-wrap";
+ const region=document.createElement("input");region.type="text";region.placeholder="选择或输入州/省/地区";region.setAttribute("aria-label","州/省/地区");region.autocomplete="off";
+ const hint=document.createElement("div");hint.className="region-hint";hint.textContent="可选：选择地区，或直接输入城市/地区";
+ regionWrap.append(region,hint);host.append(country,menu,regionWrap);hidden.parentNode.insertBefore(host,hidden.nextSibling);
+ let chosen="";
+ function renderOptions(filter=""){menu.innerHTML="";const arr=COUNTRY_DATA.filter(c=>c.toLowerCase().includes(filter.toLowerCase()));arr.forEach(c=>{const b=document.createElement("button");b.type="button";b.className="country-option";b.textContent=c;b.onclick=()=>selectCountry(c);menu.appendChild(b);});if(!arr.length)menu.innerHTML='<div class="country-option">没有匹配国家/地区</div>';menu.classList.add("open");}
+ function selectCountry(c){chosen=c;country.value=c;menu.classList.remove("open");region.value="";region.placeholder="选择或输入州/省/地区";const regions=REGION_DATA[c]||[];if(regions.length){hint.textContent="可搜索选择州/省/地区，也可自行输入城市";region.oninput=()=>{showRegions();};region.onfocus=showRegions;}else{hint.textContent="此国家/地区暂无预置行政区列表，可直接输入地区或城市";region.oninput=null;region.onfocus=null;}update();}
+ function showRegions(){const regs=REGION_DATA[chosen]||[];if(!regs.length)return;let old=host.querySelector(".region-menu");if(old)old.remove();const rm=document.createElement("div");rm.className="country-menu open region-menu";rm.style.left="50%";rm.style.width="50%";rm.style.top=(region.offsetTop+region.offsetHeight)+"px";regs.filter(x=>x.toLowerCase().includes(region.value.toLowerCase())).forEach(x=>{const b=document.createElement("button");b.type="button";b.className="country-option";b.textContent=x;b.onclick=()=>{region.value=x;rm.remove();update();};rm.appendChild(b);});host.appendChild(rm);}
+ function update(){hidden.value=[chosen,region.value.trim()].filter(Boolean).join(" / ");}
+ country.onfocus=()=>renderOptions(country.value);country.oninput=()=>renderOptions(country.value);
+ country.onkeydown=e=>{if(e.key==="Escape")menu.classList.remove("open");if(e.key==="Enter"){e.preventDefault();const c=COUNTRY_DATA.find(x=>x.toLowerCase()===country.value.toLowerCase())||COUNTRY_DATA.find(x=>x.toLowerCase().includes(country.value.toLowerCase()));if(c)selectCountry(c);}};
+ region.addEventListener("input",update);region.addEventListener("blur",()=>setTimeout(()=>host.querySelector(".region-menu")?.remove(),180));
+ document.addEventListener("click",e=>{if(!host.contains(e.target))menu.classList.remove("open");});
+ const prior=(hidden.value||"").split(" / ");if(prior.length>1){selectCountry(prior[0]);region.value=prior.slice(1).join(" / ");update();}else if(prior[0]){const c=COUNTRY_DATA.find(x=>prior[0].startsWith(x));if(c){selectCountry(c);region.value=prior[0].slice(c.length).replace(/^\s*\/\s*/,"");update();}else region.value=prior[0];}
+}
+function initChineseUi(){
+ translateStaticUi();
+ ["icp-loc","icp-loc2"].forEach(mountCountryPicker);
+ document.querySelectorAll("#icp-loc,#icp-loc2").forEach(el=>{const parent=el.parentElement; if(parent&&!parent.querySelector(".country-picker")){}});
+ const obs=new MutationObserver(()=>translateStaticUi());obs.observe(document.body,{subtree:true,childList:true,characterData:true});
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initChineseUi);else initChineseUi();
 </script>
 </body>
 </html>
