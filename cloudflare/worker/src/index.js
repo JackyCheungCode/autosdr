@@ -485,7 +485,7 @@ export default {
           try {
             const site=await fetch(parsed.origin,{headers:{"user-agent":"HephaestusLeadResearch/1.0"},signal:AbortSignal.timeout(4500)});
             if(site.ok){
-              const html=(await site.text()).slice(0,18000).replace(/<script[\\s\\S]*?<\\/script>/gi," ").replace(/<style[\\s\\S]*?<\\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/\\s+/g," ").trim();
+              const html=(await site.text()).slice(0,18000).replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/\s+/g," ").trim();
               if(html) evidence=(evidence+"\\nWebsite evidence: "+html).slice(0,5000);
             }
           } catch {}
