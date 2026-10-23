@@ -864,6 +864,8 @@ async function runPipeline(){
     const {data,raw}=await readApiResponse(r);
     if(!r.ok){
       const reason=data.detail||data.message||data.error||raw||("HTTP "+r.status);
+      $("runstate").querySelector(".dot").className="dot warn"; $("runtext").textContent="启动失败";
+      addRuntimeLog("启动失败",String(reason).slice(0,500),"error");
       toast("<b>启动失败（"+r.status+"）</b>："+esc(String(reason).slice(0,220)));
       log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">启动失败</span><div>'+esc(String(reason).slice(0,500))+'</div></div>');
       showTab("pipeline"); return;
