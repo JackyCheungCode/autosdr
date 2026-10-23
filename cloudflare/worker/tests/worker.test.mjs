@@ -2,11 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-const request = (path, init = {}) =>
-  new Request(`https://autosdr-api.example.workers.dev${path}`, init);
+const request = (path, init = {}) => {
+  const headers = new Headers(init.headers);
+  if (!headers.has("x-autosdr-proxy-token")) headers.set("x-autosdr-proxy-token", "test-proxy-token");
+  return new Request(`https://autosdr-api.example.workers.dev${path}`, { ...init, headers });
+};
+
+const baseEnv = { API_PROXY_TOKEN: "test-proxy-token" };
 
 test("health reports missing secrets without exposing any secret", async () => {
-  const response = await worker.fetch(request("/api/health"), {});
+  const response = await worker.fetch(request("/api/health"), baseEnv);
   assert.equal(response.status, 503);
   const body = await response.json();
   assert.equal(body.ok, false);
@@ -33,7 +38,7 @@ test("health reports configuration presence without returning secret values", as
 });
 
 test("unmigrated API endpoints fail explicitly rather than pretending to work", async () => {
-  const response = await worker.fetch(request("/api/run"), {});
+  const response = await worker.fetch(request("/api/run"), baseEnv);
   assert.equal(response.status, 501);
   assert.equal((await response.json()).error, "not_implemented");
 });
@@ -42,12 +47,13 @@ test("unapproved production origins do not receive CORS permission", async () =>
   const req = request("/api/health", {
     headers: { Origin: "https://attacker.example" },
   });
-  const response = await worker.fetch(req, {});
+  const response = await worker.fetch(req, baseEnv);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
 });
 
 
 const configuredEnv = {
+  API_PROXY_TOKEN: "test-proxy-token",
   SUPABASE_URL: "https://example.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "test-service-role-secret",
 };
@@ -150,7 +156,20 @@ test("lead detail returns the lead and related records from Supabase", async () 
 });
 
 test("read endpoints return a controlled unavailable response when Supabase is not configured", async () => {
-  const response = await worker.fetch(request("/api/state"), {});
+  const response = await worker.fetch(request("/api/state"), baseEnv);
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error, "database_unavailable");
+});
+
+
+test("Worker rejects direct requests without the trusted proxy token", async () => {
+  const response = await worker.fetch(new Request("https://autosdr-api.example.workers.dev/api/state"), baseEnv);
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error, "unauthorized");
+});
+
+test("Worker refuses API access when the proxy token is not configured", async () => {
+  const response = await worker.fetch(request("/api/state"), {});
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "api_proxy_not_configured");
 });
