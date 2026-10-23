@@ -19,6 +19,8 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Validate Worker bundle and Wrangler configuration (dry run)
+        run: npx --yes wrangler@latest deploy --dry-run --config wrangler.jsonc
 
   legacy-python-diagnostic:
     runs-on: ubuntu-latest
