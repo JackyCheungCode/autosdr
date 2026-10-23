@@ -16,10 +16,11 @@ MODULES = {
     "openai": "openai",
     "apscheduler": "apscheduler",
     "multipart": "python-multipart",
+    "psycopg": "psycopg[binary]",
 }
 
 ARCHITECTURE_BLOCKERS = [
-    "sqlite3 + PRAGMA/WAL + '?' placeholders require a PostgreSQL adapter rewrite.",
+    "The Python app has a psycopg adapter; a live Supabase connection and Cloudflare Worker business-route port remain unverified.",
     "APScheduler BackgroundScheduler is a long-running process model, not a Worker scheduler.",
     "Local upload paths and SQLite files are not durable Worker storage.",
     "SSE currently relies on an in-process event bus; reconnect and cross-instance state need redesign.",
