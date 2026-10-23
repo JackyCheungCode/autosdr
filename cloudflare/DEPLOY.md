@@ -52,6 +52,8 @@ Create a Cloudflare Pages project with the repository connected to GitHub:
 - Build command: leave empty for the current plain HTML frontend.
 - Build output directory: `app/static`.
 - Root directory: repository root.
+- Set the Pages environment variable `API_WORKER_URL` to the deployed Worker origin (for example, the origin shown by Wrangler; do not include an API path). The Pages Function at `functions/api/[[path]].js` proxies same-origin `/api/*` calls to that Worker, so the existing frontend URL pattern is preserved.
+- Set Worker variable `FRONTEND_ORIGIN` to the exact Pages origin for CORS. Keep preview and production origins separate.
 - Deploy preview builds from `cloudflare-supabase` to validate static assets.
 
 The existing frontend calls the FastAPI routes directly. Until API endpoints are ported, most app actions will not work against the Worker scaffold.
