@@ -28,7 +28,7 @@ function requireSupabase(env) {
   };
 }
 
-async function supabaseRequest(env, table, params = {}, range = null) {
+async function supabaseRequest(env, table, params = {}, range = null, options = {}) {
   const cfg = requireSupabase(env);
   const url = new URL(table, cfg.base);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
@@ -37,17 +37,41 @@ async function supabaseRequest(env, table, params = {}, range = null) {
     authorization: `Bearer ${cfg.key}`,
     accept: "application/json",
   };
+  if (options.body !== undefined) {
+    headers["content-type"] = "application/json";
+    headers.prefer = options.prefer || "return=representation";
+  }
   if (range) {
     headers.range = range;
     headers["range-unit"] = "items";
   }
-  const response = await fetch(url, { headers });
+  const response = await fetch(url, {
+    method: options.method || "GET",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
   if (!response.ok) {
     // Do not return upstream response bodies: PostgREST errors may include schema details.
     throw new Error(`Supabase query failed (HTTP ${response.status})`);
   }
   if (response.status === 204) return [];
   return response.json();
+}
+
+async function formOrJson(request) {
+  const type = request.headers.get("content-type") || "";
+  if (type.includes("application/json")) return request.json();
+  const form = await request.formData();
+  return Object.fromEntries(form.entries());
+}
+
+async function setKv(env, key, value) {
+  const rows = await supabaseRequest(
+    env, "kv", { on_conflict: "k" }, null,
+    { method: "POST", body: { k: key, v: JSON.stringify(value) }, prefer: "resolution=merge-duplicates,return=representation" },
+  );
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error("Supabase KV upsert returned no row");
+  return rows[0];
 }
 
 async function selectAll(env, table, select = "*", filters = {}) {
@@ -191,6 +215,45 @@ export default {
         const notes = await supabaseRequest(env, "memory_notes", { select: "*", order: "ts.desc", limit: "50" });
         return json({ short_term: { current_task: null, active_agent: null, leads: {} }, long_term_notes: notes }, 200, headers);
       } catch { return json({ ok: false, error: "database_unavailable" }, 503, headers); }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/settings/approval") {
+      try {
+        const input = await formOrJson(request);
+        const raw = input.enabled;
+        const enabled = raw === true || raw === "true" || raw === "1" || raw === 1 || raw === "on";
+        await setKv(env, "approval_mode", enabled);
+        return json({ ok: true, approval_mode: enabled }, 200, headers);
+      } catch {
+        return json({ ok: false, error: "database_unavailable" }, 503, headers);
+      }
+    }
+
+    const rejectMatch = url.pathname.match(/^\\/api\\/outbox\\/([^/]+)\\/reject$/);
+    if (request.method === "POST" && rejectMatch) {
+      try {
+        const messageId = decodeURIComponent(rejectMatch[1]);
+        const updated = await supabaseRequest(
+          env, "messages",
+          { id: `eq.${messageId}`, status: "eq.draft" },
+          null,
+          { method: "PATCH", body: { status: "rejected" } },
+        );
+        if (!Array.isArray(updated) || updated.length === 0) {
+          return json({ ok: false, error: "draft_not_found_or_already_handled" }, 404, headers);
+        }
+        return json({ ok: true }, 200, headers);
+      } catch {
+        return json({ ok: false, error: "database_unavailable" }, 503, headers);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname.match(/^\\/api\\/outbox\\/[^/]+\\/approve$/)) {
+      return json({
+        ok: false,
+        error: "not_implemented",
+        message: "Email delivery is intentionally not enabled in the Cloudflare Worker yet.",
+      }, 501, headers);
     }
 
     if (request.method === "GET" && url.pathname === "/api/outbox") {
