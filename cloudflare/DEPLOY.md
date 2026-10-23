@@ -69,3 +69,8 @@ The existing frontend calls FastAPI routes directly. The read-only dashboard end
 - The Python/FastAPI code now has a dual SQLite/PostgreSQL adapter; it has not been verified against a live Supabase project. The JavaScript Worker still does not serve the FastAPI business routes.
 - Scheduler, IMAP, PDF/RAG, booking, and SSE migration remain open.
 - No production deployment has been performed from this repository.\n- The proxy token protects direct Worker calls; it does not replace end-user authentication. Cloudflare Access is required in front of Pages before exposing non-demo data.
+
+
+## ICP generation
+
+`POST /api/icp` requires a saved `company_profile` in Supabase `kv` and accepts JSON or form fields `location`, `industry`, `size`, and `targeting`. Configure Worker secrets `OPENAI_API_KEY` and `OPENAI_MODEL`; optionally `OPENAI_BASE_URL` for an OpenAI-compatible endpoint. Keep all credentials server-side. Tests mock the LLM and Supabase calls; live provider compatibility is not yet verified.
