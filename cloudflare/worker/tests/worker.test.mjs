@@ -209,3 +209,74 @@ test("Pages proxy fails closed when its shared token is missing", async () => {
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error, "api_proxy_not_configured");
 });
+
+
+test("approval setting accepts JSON and upserts a boolean into Supabase KV", async () => {
+  const originalFetch = globalThis.fetch;
+  let seenUrl;
+  let seenBody;
+  let seenMethod;
+  globalThis.fetch = async (input, init = {}) => {
+    seenUrl = new URL(input);
+    seenMethod = init.method;
+    seenBody = JSON.parse(init.body);
+    assert.match(new Headers(init.headers).get("prefer"), /resolution=merge-duplicates/);
+    return Response.json([{ k: "approval_mode", v: "true" }]);
+  };
+  try {
+    const response = await worker.fetch(request("/api/settings/approval", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true }),
+    }), configuredEnv);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, approval_mode: true });
+    assert.equal(seenUrl.pathname.endsWith("/kv"), true);
+    assert.equal(seenMethod, "POST");
+    assert.deepEqual(seenBody, { k: "approval_mode", v: "true" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reject draft only changes a currently-draft message", async () => {
+  const originalFetch = globalThis.fetch;
+  let seenUrl;
+  let seenBody;
+  let seenMethod;
+  globalThis.fetch = async (input, init = {}) => {
+    seenUrl = new URL(input instanceof Request ? input.url : input);
+    const actualInit = init || {};
+    seenMethod = actualInit.method || (input instanceof Request ? input.method : "GET");
+    seenBody = JSON.parse(actualInit.body || (input instanceof Request ? await input.clone().text() : "null"));
+    assert.equal(seenUrl.searchParams.get("id"), "eq.msg-123");
+    assert.equal(seenUrl.searchParams.get("status"), "eq.draft");
+    return Response.json([{ id: "msg-123", status: "rejected" }]);
+  };
+  try {
+    const response = await worker.fetch(request("/api/outbox/msg-123/reject", { method: "POST" }), configuredEnv);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true });
+    assert.equal(seenMethod, "PATCH");
+    assert.deepEqual(seenBody, { status: "rejected" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reject draft returns 404 when no pending draft was updated", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([]);
+  try {
+    const response = await worker.fetch(request("/api/outbox/missing/reject", { method: "POST" }), configuredEnv);
+    assert.equal(response.status, 404);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("approve draft remains disabled until email delivery is safely ported", async () => {
+  const response = await worker.fetch(request("/api/outbox/msg-123/approve", { method: "POST" }), configuredEnv);
+  assert.equal(response.status, 501);
+  assert.equal((await response.json()).error, "not_implemented");
+});
