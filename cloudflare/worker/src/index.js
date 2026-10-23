@@ -229,7 +229,7 @@ export default {
       }
     }
 
-    const rejectMatch = url.pathname.match(/^\\/api\\/outbox\\/([^/]+)\\/reject$/);
+    const rejectMatch = url.pathname.match(/^\/api\/outbox\/([^/]+)\/reject$/);
     if (request.method === "POST" && rejectMatch) {
       try {
         const messageId = decodeURIComponent(rejectMatch[1]);
@@ -248,7 +248,7 @@ export default {
       }
     }
 
-    if (request.method === "POST" && url.pathname.match(/^\\/api\\/outbox\\/[^/]+\\/approve$/)) {
+    if (request.method === "POST" && url.pathname.match(/^\/api\/outbox\/[^/]+\/approve$/)) {
       return json({
         ok: false,
         error: "not_implemented",
