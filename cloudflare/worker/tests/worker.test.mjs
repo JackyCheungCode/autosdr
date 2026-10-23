@@ -79,7 +79,7 @@ test("SSE stream formats upstream errors as parseable SSE frames", async () => {
     const reader = response.body.getReader();
     const first = await reader.read();
     const chunk = new TextDecoder().decode(first.value);
-    assert.match(chunk, /^event: error\\ndata: \\{"error":"event_stream_unavailable"\\}\\n\\n$/);
+    assert.match(chunk, /^event: error\ndata: \{"error":"event_stream_unavailable"\}\n\n$/);
     await reader.cancel();
   } finally {
     globalThis.fetch = originalFetch;
