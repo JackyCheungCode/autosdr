@@ -321,6 +321,40 @@ test("simulated reply validates required fields before contacting providers", as
   assert.equal((await response.json()).error, "from_email_and_body_required");
 });
 
+test("simulated reply rejects malformed LLM classifications before persisting a message", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    const method = init.method || "GET";
+    calls.push({ url, method });
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/contacts")) {
+      return Response.json([{ id: "contact-1", lead_id: "lead-1", name: "Prospect", email: "prospect@example.com" }]);
+    }
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/leads")) {
+      return Response.json([{ id: "lead-1", name: "Example Lead", stage: "contacted" }]);
+    }
+    if (url.hostname === "api.openai.com") {
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ category: "meeting_requested" }) } }] });
+    }
+    throw new Error("Unexpected mocked fetch: " + url.toString());
+  };
+  try {
+    const env = { ...configuredEnv, OPENAI_API_KEY: "test-llm-key", OPENAI_MODEL: "test-model" };
+    const response = await worker.fetch(request("/api/sim/reply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ from_email: "prospect@example.com", subject: "Re: demo", body: "Can we meet?" }),
+    }), env);
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error, "reply_processing_failed");
+    assert.equal(calls.some(call => call.url.pathname.endsWith("/messages") && call.method === "POST"), false);
+    assert.equal(calls.some(call => call.url.pathname.endsWith("/events") && call.method === "POST"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("approval setting accepts JSON and upserts a boolean into Supabase KV", async () => {
   const originalFetch = globalThis.fetch;
   let seenUrl;
