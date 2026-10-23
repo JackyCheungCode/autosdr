@@ -65,6 +65,64 @@ async function formOrJson(request) {
   return Object.fromEntries(form.entries());
 }
 
+const COMPANY_PROFILE_SCHEMA = {
+  type: "object", additionalProperties: false,
+  properties: {
+    company_name: { type: "string" }, tagline: { type: "string" }, what_we_sell: { type: "string" },
+    services: { type: "array", items: { type: "object", additionalProperties: false, properties: {
+      name: { type: "string" }, description: { type: "string" }, ideal_for: { type: "string" },
+      buying_signals: { type: "array", items: { type: "string" } }, source_chunks: { type: "array", items: { type: "string" } },
+    }, required: ["name", "description", "ideal_for", "buying_signals", "source_chunks"] } },
+    target_industries: { type: "array", items: { type: "string" } },
+    case_studies: { type: "array", items: { type: "object", additionalProperties: false, properties: {
+      client: { type: "string" }, industry: { type: "string" }, problem: { type: "string" },
+      result: { type: "string" }, source_chunks: { type: "array", items: { type: "string" } },
+    }, required: ["client", "industry", "problem", "result", "source_chunks"] } },
+    pricing_notes: { type: "string" }, limitations: { type: "array", items: { type: "string" } },
+    differentiators: { type: "array", items: { type: "string" } },
+  },
+  required: ["company_name", "tagline", "what_we_sell", "services", "target_industries",
+    "case_studies", "pricing_notes", "limitations", "differentiators"],
+};
+
+async function generateCompanyProfile(env, sourceName, sourceText) {
+  if (!env.OPENAI_API_KEY || !env.OPENAI_MODEL) {
+    const error = new Error("llm_not_configured");
+    error.code = "llm_not_configured";
+    throw error;
+  }
+  const chunks = [];
+  for (let i = 0; i < sourceText.length; i += 7000) {
+    chunks.push({ id: `text-${chunks.length + 1}`, text: sourceText.slice(i, i + 7000) });
+  }
+  const doc = chunks.map(chunk => `[${chunk.id}] ${chunk.text}`).join("\\n\\n").slice(0, 90000);
+  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/$/, "") + "/chat/completions";
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: env.OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "Extract a faithful company profile from the supplied document. Use only facts present; never invent services, clients, numbers or claims. Cite chunk IDs for services and case studies. If pricing is absent, say so. Include promises sales must never make in limitations." },
+        { role: "user", content: `Source name: ${sourceName}\\nDocument chunks:\\n\\n${doc}` },
+      ],
+      response_format: { type: "json_schema", json_schema: { name: "company_profile", strict: true, schema: COMPANY_PROFILE_SCHEMA } },
+    }),
+  });
+  if (!response.ok) throw new Error("LLM request failed");
+  const payload = await response.json();
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content !== "string") throw new Error("LLM returned no structured profile");
+  const profile = JSON.parse(content);
+  if (!Array.isArray(profile.services) || !Array.isArray(profile.case_studies) ||
+      !Array.isArray(profile.target_industries) || !Array.isArray(profile.limitations)) {
+    throw new Error("LLM returned invalid company profile");
+  }
+  await setKv(env, "company_profile", profile);
+  await setKv(env, "company_profile_source", { name: sourceName, chunks });
+  return profile;
+}
+
 const ICP_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -268,6 +326,21 @@ export default {
         const notes = await supabaseRequest(env, "memory_notes", { select: "*", order: "ts.desc", limit: "50" });
         return json({ short_term: { current_task: null, active_agent: null, leads: {} }, long_term_notes: notes }, 200, headers);
       } catch { return json({ ok: false, error: "database_unavailable" }, 503, headers); }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/company/text") {
+      try {
+        const input = await formOrJson(request);
+        const sourceText = String(input.text || "").trim();
+        if (!sourceText) return json({ ok: false, error: "empty_text" }, 400, headers);
+        if (sourceText.length > 180000) return json({ ok: false, error: "text_too_large" }, 413, headers);
+        const sourceName = String(input.name || "company description").trim().slice(0, 160) || "company description";
+        const profile = await generateCompanyProfile(env, sourceName, sourceText);
+        return json({ ok: true, profile }, 200, headers);
+      } catch (error) {
+        if (error?.code === "llm_not_configured") return json({ ok: false, error: "llm_not_configured" }, 503, headers);
+        return json({ ok: false, error: "company_profile_generation_failed" }, 502, headers);
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/api/icp") {
