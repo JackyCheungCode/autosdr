@@ -46,7 +46,7 @@ Set `FRONTEND_ORIGIN` in `cloudflare/worker/wrangler.jsonc` to the exact Pages o
 npx wrangler deploy --config wrangler.jsonc
 ```
 
-The initial Worker implements only `GET /api/health` and explicit 501 responses for unmigrated API routes. Health confirms configuration presence only; it does not yet execute a Supabase query.
+The Worker now implements read-only `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, and `/api/leads/:id` routes using the Supabase REST API. Health performs a small real database query. These routes require the migration to be applied and server-side secrets to be configured. Write actions (pipeline run/stop, approval/rejection, company upload/text, ICP, reply simulation, booking actions), SSE, scheduler, and report/booking pages are still not migrated and return explicit 501 for `/api/*` paths not implemented.
 
 ## 3. Pages static frontend
 
@@ -60,11 +60,11 @@ Create a Cloudflare Pages project with the repository connected to GitHub:
 - Set Worker variable `FRONTEND_ORIGIN` to the exact Pages origin for CORS. Keep preview and production origins separate.
 - Deploy preview builds from `cloudflare-supabase` to validate static assets.
 
-The existing frontend calls the FastAPI routes directly. Until API endpoints are ported, most app actions will not work against the Worker scaffold.
+The existing frontend calls FastAPI routes directly. The read-only dashboard endpoints are ported, but most mutating actions and streaming workflows still will not work against the Worker scaffold.
 
 ## 4. Current limitations
 
-- No FastAPI business routes have been ported.
+- Only a read-only subset of FastAPI routes has been ported; no pipeline or outreach mutations are implemented in Worker.
 - The Python/FastAPI code now has a dual SQLite/PostgreSQL adapter; it has not been verified against a live Supabase project. The JavaScript Worker still does not serve the FastAPI business routes.
 - Scheduler, IMAP, PDF/RAG, booking, and SSE migration remain open.
 - No production deployment has been performed from this repository.
