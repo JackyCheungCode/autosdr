@@ -9,6 +9,16 @@ This is an incremental deployment scaffold, not a completed port of the FastAPI 
 3. The migration enables RLS and grants table access only to `service_role`. Browser keys must not be used for server-side data access.
 4. The migration retains embedding data as `BYTEA` until the current embedding model and vector dimension are confirmed.
 
+## 1a. Import existing SQLite data (optional)
+
+Make a copy of `data/autosdr.db` from the machine that currently runs AutoSDR. Install the existing Python requirements, then run a dry run first:
+
+```sh
+python scripts/migrate_sqlite_to_supabase.py --source data/autosdr.db
+```
+
+Only after reviewing the counts and backing up the staging database should you set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the shell environment and add `--apply`. The importer uses primary-key upserts and can partially write before an error; rerun only against the same staging project after resolving the error. Verify all table counts and run the printed `events.seq` sequence-fix SQL in Supabase before using the database. Do not point the first import at a production project.
+
 ## 2. Worker API
 
 Install a current Wrangler CLI locally, then:
