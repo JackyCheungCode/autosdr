@@ -21,6 +21,7 @@ test("health reports missing secrets without exposing any secret", async () => {
 
 test("health reports configuration presence without returning secret values", async () => {
   const env = {
+    API_PROXY_TOKEN: "test-proxy-token",
     SUPABASE_URL: "https://example.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "SERVICE_ROLE_KEY_VALUE",
   };
