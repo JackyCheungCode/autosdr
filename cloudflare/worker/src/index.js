@@ -65,6 +65,59 @@ async function formOrJson(request) {
   return Object.fromEntries(form.entries());
 }
 
+const ICP_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    location: { type: "string" },
+    industries: { type: "array", items: { type: "string" } },
+    company_size: { type: "string" },
+    special_targeting: { type: "string" },
+    must_have: { type: "array", items: { type: "string" } },
+    disqualifiers: { type: "array", items: { type: "string" } },
+    search_queries: { type: "array", items: { type: "string" } },
+    scoring_hints: { type: "array", items: { type: "string" } },
+  },
+  required: ["location", "industries", "company_size", "special_targeting",
+    "must_have", "disqualifiers", "search_queries", "scoring_hints"],
+};
+
+async function generateIcp(env, profile, answers) {
+  if (!env.OPENAI_API_KEY || !env.OPENAI_MODEL) {
+    const error = new Error("llm_not_configured");
+    error.code = "llm_not_configured";
+    throw error;
+  }
+  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/$/, "") + "/chat/completions";
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: env.OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "You are an Ideal Customer Profile agent. Ground the ICP in the selling company's actual offers. Produce realistic search queries for company websites/directories, concrete disqualifiers, and useful scoring hints. Do not invent company capabilities." },
+        { role: "user", content: `Selling company: ${profile.company_name || "(unknown)"}; services: ${(profile.services || []).map(s => s.name).join("; ")}; offer: ${profile.what_we_sell || ""}\\nTarget location: ${answers.location || ""}\\nTarget industry/market: ${answers.industry || ""}\\nCompany size/criteria: ${answers.size || ""}\\nSpecial targeting: ${answers.targeting || ""}` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "icp", strict: true, schema: ICP_SCHEMA },
+      },
+    }),
+  });
+  if (!response.ok) throw new Error("LLM request failed");
+  const payload = await response.json();
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content !== "string") throw new Error("LLM returned no structured ICP");
+  const icp = JSON.parse(content);
+  if (!Array.isArray(icp.industries) || !Array.isArray(icp.search_queries) ||
+      !Array.isArray(icp.disqualifiers) || !Array.isArray(icp.must_have) ||
+      !Array.isArray(icp.scoring_hints)) throw new Error("LLM returned invalid ICP");
+  return icp;
+}
+
 async function setKv(env, key, value) {
   const rows = await supabaseRequest(
     env, "kv", { on_conflict: "k" }, null,
@@ -215,6 +268,28 @@ export default {
         const notes = await supabaseRequest(env, "memory_notes", { select: "*", order: "ts.desc", limit: "50" });
         return json({ short_term: { current_task: null, active_agent: null, leads: {} }, long_term_notes: notes }, 200, headers);
       } catch { return json({ ok: false, error: "database_unavailable" }, 503, headers); }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/icp") {
+      try {
+        const input = await formOrJson(request);
+        const profile = await getKv(env, "company_profile");
+        if (!profile) return json({ ok: false, error: "company_profile_required" }, 400, headers);
+        const answers = {
+          location: String(input.location || ""),
+          industry: String(input.industry || ""),
+          size: String(input.size || ""),
+          targeting: String(input.targeting || ""),
+        };
+        const icp = await generateIcp(env, profile, answers);
+        await setKv(env, "icp", icp);
+        return json({ ok: true, icp }, 200, headers);
+      } catch (error) {
+        if (error?.code === "llm_not_configured") {
+          return json({ ok: false, error: "llm_not_configured" }, 503, headers);
+        }
+        return json({ ok: false, error: "icp_generation_failed" }, 502, headers);
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/api/settings/approval") {
