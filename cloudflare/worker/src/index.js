@@ -123,6 +123,49 @@ async function generateCompanyProfile(env, sourceName, sourceText) {
   return profile;
 }
 
+const REPLY_CLASSIFICATION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    category: { type: "string", enum: ["positive", "meeting_requested", "question", "pricing_objection", "technical_objection", "not_interested", "not_now", "wrong_person_referral", "other"] },
+    sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
+    summary: { type: "string" },
+    extracted_question: { type: "string" },
+    next_action: { type: "string" },
+  },
+  required: ["category", "sentiment", "summary", "extracted_question", "next_action"],
+};
+
+async function classifyReply(env, lead, contact, subject, body) {
+  if (!env.OPENAI_API_KEY || !env.OPENAI_MODEL) {
+    const error = new Error("llm_not_configured");
+    error.code = "llm_not_configured";
+    throw error;
+  }
+  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/$/, "") + "/chat/completions";
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: env.OPENAI_MODEL,
+      messages: [
+        { role: "system", content: "Classify a prospect's email reply. Use meeting_requested for a request to talk, see a demo, or pick a time. Separate pricing and technical objections. Do not draft or send a response." },
+        { role: "user", content: `Company: ${lead?.name || "unknown"}; contact role: ${contact?.role || "unknown"}\\nSubject: ${subject}\\nReply: ${body.slice(0, 5000)}` },
+      ],
+      response_format: { type: "json_schema", json_schema: { name: "reply_classification", strict: true, schema: REPLY_CLASSIFICATION_SCHEMA } },
+    }),
+  });
+  if (!response.ok) throw new Error("LLM request failed");
+  const payload = await response.json();
+  const content = payload.choices?.[0]?.message?.content;
+  if (typeof content !== "string") throw new Error("LLM returned no classification");
+  const result = JSON.parse(content);
+  if (!REPLY_CLASSIFICATION_SCHEMA.properties.category.enum.includes(result.category)) {
+    throw new Error("LLM returned invalid category");
+  }
+  return result;
+}
+
 const ICP_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -435,6 +478,64 @@ export default {
           return json({ ok: false, error: "llm_not_configured" }, 503, headers);
         }
         return json({ ok: false, error: "icp_generation_failed" }, 502, headers);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/sim/reply") {
+      let input;
+      try { input = await formOrJson(request); }
+      catch { return json({ ok: false, error: "invalid_request" }, 400, headers); }
+      const fromEmail = String(input.from_email || "").trim().toLowerCase();
+      const subject = String(input.subject || "").trim().slice(0, 500);
+      const body = String(input.body || "").trim();
+      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(fromEmail) || !body) {
+        return json({ ok: false, error: "from_email_and_body_required" }, 400, headers);
+      }
+      if (body.length > 10000) return json({ ok: false, error: "reply_too_large" }, 413, headers);
+      try {
+        const contacts = await supabaseRequest(env, "contacts", {
+          select: "id,lead_id,name,role,email", email: `ilike.${fromEmail}`, order: "ts.desc", limit: "1",
+        });
+        if (!contacts.length) return json({ ok: false, error: "contact_not_found" }, 404, headers);
+        const contact = contacts[0];
+        const leadRows = contact.lead_id ? await supabaseRequest(env, "leads", {
+          select: "id,name,stage", id: `eq.${contact.lead_id}`, limit: "1",
+        }) : [];
+        const lead = leadRows[0] || null;
+        const classification = await classifyReply(env, lead, contact, subject, body);
+        const now = Date.now() / 1000;
+        const messageId = crypto.randomUUID();
+        await supabaseRequest(env, "messages", {}, null, {
+          method: "POST",
+          body: {
+            id: messageId, lead_id: contact.lead_id || null, contact_id: contact.id,
+            direction: "in", channel: "email", subject, body,
+            meta: JSON.stringify({ classification, simulated: true }),
+            status: "received", ts: now,
+          },
+        });
+        const interested = ["positive", "meeting_requested", "question", "pricing_objection", "technical_objection"];
+        if (lead && interested.includes(classification.category)) {
+          await supabaseRequest(env, "leads", { id: `eq.${lead.id}` }, null, {
+            method: "PATCH", body: { stage: "interested", updated_ts: now },
+          });
+        } else if (lead && classification.category === "not_interested") {
+          await supabaseRequest(env, "leads", { id: `eq.${lead.id}` }, null, {
+            method: "PATCH", body: { stage: "not_interested", updated_ts: now },
+          });
+        }
+        await supabaseRequest(env, "events", {}, null, {
+          method: "POST",
+          body: {
+            ts: now, agent: "inbox", type: "decision",
+            label: `Reply classified: ${classification.category} (${classification.sentiment})`,
+            lead_id: contact.lead_id || null, payload: JSON.stringify(classification),
+          },
+        });
+        return json({ ok: true, received: true, classification, auto_reply_sent: false }, 200, headers);
+      } catch (error) {
+        if (error?.code === "llm_not_configured") return json({ ok: false, error: "llm_not_configured" }, 503, headers);
+        return json({ ok: false, error: "reply_processing_failed" }, 502, headers);
       }
     }
 
