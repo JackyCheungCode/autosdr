@@ -122,3 +122,35 @@ test("health checks actual Supabase reachability, not only secret presence", asy
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("lead detail returns the lead and related records from Supabase", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith("/leads")) {
+      return Response.json([{ id: "lead-1", name: "Example Ltd", score_reasons: "{\"headline\":\"Strong fit\"}" }]);
+    }
+    if (url.pathname.endsWith("/contacts")) return Response.json([{ id: "contact-1", lead_id: "lead-1" }]);
+    if (url.pathname.endsWith("/evidence")) return Response.json([]);
+    if (url.pathname.endsWith("/messages")) return Response.json([{ id: "msg-1", lead_id: "lead-1", meta: "{\"to_addr\":\"sales@example.com\"}" }]);
+    if (url.pathname.endsWith("/meetings") || url.pathname.endsWith("/followups") || url.pathname.endsWith("/memory_notes")) return Response.json([]);
+    throw new Error("Unexpected table request");
+  };
+  try {
+    const response = await worker.fetch(request("/api/leads/lead-1"), configuredEnv);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.deepEqual(body.lead.score_reasons, { headline: "Strong fit" });
+    assert.equal(body.contacts[0].id, "contact-1");
+    assert.deepEqual(body.messages[0].meta, { to_addr: "sales@example.com" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("read endpoints return a controlled unavailable response when Supabase is not configured", async () => {
+  const response = await worker.fetch(request("/api/state"), {});
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "database_unavailable");
+});
