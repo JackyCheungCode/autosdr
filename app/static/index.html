@@ -1042,7 +1042,7 @@ const REGION_DATA={
 "德国":"巴登-符腾堡州|巴伐利亚州|柏林|勃兰登堡州|不来梅州|汉堡|黑森州|梅克伦堡-前波美拉尼亚州|下萨克森州|北莱茵-威斯特法伦州|莱茵兰-普法尔茨州|萨尔州|萨克森州|萨克森-安哈尔特州|石勒苏益格-荷尔斯泰因州|图林根州".split("|")
 };
 function mountCountryPicker(id){
- const hidden=$(id);if(!hidden||hidden.dataset.countryPicker)return;hidden.dataset.countryPicker="1";
+ const hidden=$(id);if(!hidden||hidden.dataset.countryPicker)return;hidden.dataset.countryPicker="1";hidden.style.display="none";
  const host=document.createElement("div");host.className="country-picker";
  const country=document.createElement("input");country.type="text";country.placeholder="搜索并选择国家/地区";country.setAttribute("aria-label","搜索并选择国家/地区");country.autocomplete="off";
  const menu=document.createElement("div");menu.className="country-menu";menu.setAttribute("role","listbox");
