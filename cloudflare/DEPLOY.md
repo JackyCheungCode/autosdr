@@ -47,7 +47,7 @@ Set `FRONTEND_ORIGIN` in `cloudflare/worker/wrangler.jsonc` to the exact Pages o
 npx wrangler deploy --config wrangler.jsonc
 ```
 
-The Worker requires the shared `API_PROXY_TOKEN` from the Pages Function for API access and implements read-only `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, and `/api/leads/:id` routes using the Supabase REST API. Health performs a small real database query. These routes require the migration to be applied and server-side secrets to be configured. Write actions (pipeline run/stop, approval/rejection, company upload/text, ICP, reply simulation, booking actions), SSE, scheduler, and report/booking pages are still not migrated and return explicit 501 for `/api/*` paths not implemented.
+The Worker requires the shared `API_PROXY_TOKEN` from the Pages Function for API access and implements read-only `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, and `/api/leads/:id` routes using the Supabase REST API. Health performs a small real database query. These routes require the migration to be applied and server-side secrets to be configured. Email sending for `POST /api/outbox/:id/approve` intentionally remains disabled (501); pipeline run/stop, company upload/text, ICP, reply simulation, booking actions, SSE, scheduler, and report/booking pages are not migrated and return explicit 501 for unported `/api/*` paths.
 
 ## 3. Pages static frontend
 
