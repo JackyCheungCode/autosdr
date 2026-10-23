@@ -429,6 +429,26 @@ export default {
       }
     }
 
+    if (request.method === "POST" && url.pathname === "/api/run") {
+      // The original Python orchestrator has not been ported to Workers yet.
+      // Return an explicit capability error rather than allowing the UI to imply a run started.
+      return json({
+        ok: false,
+        error: "pipeline_not_migrated",
+        message: "客户开发后台流程尚未部署到 Cloudflare 版本。公司资料分析和 ICP 生成可用，但客户搜索、深度研究、评分和开发信流程尚未接通。此次没有启动任务，也没有生成客户。",
+        available: ["company_profile_analysis", "icp_generation", "state_read", "stats_read", "activity_stream"],
+        pending: ["lead_discovery", "lead_research", "lead_scoring", "contact_finding", "outreach"],
+      }, 501, headers);
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/stop") {
+      return json({
+        ok: false,
+        error: "pipeline_not_running",
+        message: "当前 Cloudflare 版本没有可停止的客户开发后台任务，因为该流程尚未迁移。",
+      }, 501, headers);
+    }
+
     if (request.method === "GET" && url.pathname === "/api/state") {
       try { return json(await getState(env), 200, headers); }
       catch { return json({ ok: false, error: "database_unavailable" }, 503, headers); }
