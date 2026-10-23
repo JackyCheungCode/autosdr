@@ -252,6 +252,75 @@ test("Pages proxy fails closed when its shared token is missing", async () => {
 });
 
 
+test("simulated reply is classified, stored, and updates lead without sending email", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const classification = {
+    category: "meeting_requested", sentiment: "positive", summary: "Wants to book a call",
+    extracted_question: "", next_action: "Offer available meeting times",
+  };
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    const method = init.method || "GET";
+    const body = init.body ? JSON.parse(init.body) : null;
+    calls.push({ url, method, body });
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/contacts")) {
+      assert.equal(url.searchParams.get("email"), "ilike.prospect@example.com");
+      return Response.json([{ id: "contact-1", lead_id: "lead-1", name: "Prospect", role: "Buyer", email: "prospect@example.com" }]);
+    }
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/leads") && method === "GET") {
+      return Response.json([{ id: "lead-1", name: "Example Lead", stage: "contacted" }]);
+    }
+    if (url.hostname === "api.openai.com") {
+      return Response.json({ choices: [{ message: { content: JSON.stringify(classification) } }] });
+    }
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/messages") && method === "POST") {
+      assert.equal(body.direction, "in");
+      assert.equal(body.status, "received");
+      assert.equal(JSON.parse(body.meta).simulated, true);
+      return Response.json([body]);
+    }
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/leads") && method === "PATCH") {
+      assert.equal(body.stage, "interested");
+      return Response.json([{ id: "lead-1", stage: "interested" }]);
+    }
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/events") && method === "POST") {
+      assert.match(body.label, /meeting_requested/);
+      return Response.json([body]);
+    }
+    throw new Error("Unexpected mocked fetch: " + url.toString());
+  };
+  try {
+    const env = { ...configuredEnv, OPENAI_API_KEY: "test-llm-key", OPENAI_MODEL: "test-model" };
+    const response = await worker.fetch(request("/api/sim/reply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ from_email: "Prospect@example.com", subject: "Re: demo", body: "Can we book a call?" }),
+    }), env);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.received, true);
+    assert.equal(result.auto_reply_sent, false);
+    assert.equal(result.classification.category, "meeting_requested");
+    assert.equal(calls.some(call => call.url.hostname === "api.openai.com"), true);
+    assert.equal(calls.some(call => call.method === "PATCH" && call.url.pathname.endsWith("/leads")), true);
+    assert.equal(calls.some(call => call.method === "POST" && call.url.pathname.endsWith("/events")), true);
+    assert.equal(calls.some(call => call.url.pathname.endsWith("/messages") && call.method === "POST"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("simulated reply validates required fields before contacting providers", async () => {
+  const response = await worker.fetch(request("/api/sim/reply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ from_email: "not-an-email", body: "" }),
+  }), configuredEnv);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "from_email_and_body_required");
+});
+
 test("approval setting accepts JSON and upserts a boolean into Supabase KV", async () => {
   const originalFetch = globalThis.fetch;
   let seenUrl;
