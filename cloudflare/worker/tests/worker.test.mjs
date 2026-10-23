@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
+import { onRequest } from "../../../functions/api/[[path]].js";
 
 const request = (path, init = {}) => {
   const headers = new Headers(init.headers);
@@ -171,6 +172,40 @@ test("Worker rejects direct requests without the trusted proxy token", async () 
 
 test("Worker refuses API access when the proxy token is not configured", async () => {
   const response = await worker.fetch(request("/api/state"), {});
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "api_proxy_not_configured");
+});
+
+
+test("Pages proxy injects the shared token server-side and preserves the API path", async () => {
+  const originalFetch = globalThis.fetch;
+  let seenUrl;
+  let seenToken;
+  globalThis.fetch = async (input, init = {}) => {
+    seenUrl = new URL(input);
+    seenToken = new Headers(init.headers).get("x-autosdr-proxy-token");
+    return Response.json({ ok: true });
+  };
+  try {
+    const response = await onRequest({
+      request: new Request("https://autosdr-preview.pages.dev/api/state?view=compact"),
+      env: { API_WORKER_URL: "https://autosdr-api.example.workers.dev", API_PROXY_TOKEN: "server-only-token" },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(seenUrl.origin, "https://autosdr-api.example.workers.dev");
+    assert.equal(seenUrl.pathname, "/api/state");
+    assert.equal(seenUrl.searchParams.get("view"), "compact");
+    assert.equal(seenToken, "server-only-token");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Pages proxy fails closed when its shared token is missing", async () => {
+  const response = await onRequest({
+    request: new Request("https://autosdr-preview.pages.dev/api/state"),
+    env: { API_WORKER_URL: "https://autosdr-api.example.workers.dev" },
+  });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error, "api_proxy_not_configured");
 });
