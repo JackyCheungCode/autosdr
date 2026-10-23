@@ -88,7 +88,7 @@ async function generateIcp(env, profile, answers) {
     error.code = "llm_not_configured";
     throw error;
   }
-  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/$/, "") + "/chat/completions";
+  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
