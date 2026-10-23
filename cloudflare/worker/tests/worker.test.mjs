@@ -45,6 +45,32 @@ test("unmigrated API endpoints fail explicitly rather than pretending to work", 
   assert.equal((await response.json()).error, "not_implemented");
 });
 
+test("SSE stream replays recent Supabase events and emits standard event IDs", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    assert.equal(url.pathname.endsWith("/events"), true);
+    assert.equal(url.searchParams.get("order"), "seq.desc");
+    return Response.json([{
+      seq: 42, ts: 123, agent: "research", type: "step",
+      label: "Research started", lead_id: "lead-1", payload: "{}",
+    }]);
+  };
+  try {
+    const response = await worker.fetch(request("/api/events/stream"), configuredEnv);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/event-stream/);
+    const reader = response.body.getReader();
+    const first = await reader.read();
+    const chunk = new TextDecoder().decode(first.value);
+    assert.match(chunk, /id: 42/);
+    assert.match(chunk, /Research started/);
+    await reader.cancel();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("unapproved production origins do not receive CORS permission", async () => {
   const req = request("/api/health", {
     headers: { Origin: "https://attacker.example" },
