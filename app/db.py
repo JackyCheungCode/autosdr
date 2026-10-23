@@ -1,11 +1,18 @@
-"""SQLite = long-term memory. One connection per call site (check_same_thread off, WAL)."""
+"""SQLite/PostgreSQL persistence adapter for the existing AutoSDR query helpers.
+
+Set DATABASE_URL to use Supabase PostgreSQL. Apply the checked-in SQL migration
+before starting the app. Without DATABASE_URL, the local SQLite backend remains
+the default for development.
+"""
 import json
+import re
 import sqlite3
 import time
 import uuid
+import threading
 from contextlib import contextmanager
 
-from .config import DB_PATH
+from .config import DATABASE_URL, DB_PATH
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS leads (
@@ -55,35 +62,125 @@ STAGES = [
     "not_qualified", "not_interested", "do_not_contact",
 ]
 
-
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
-
-
 _conn = None
+_lock = threading.RLock()
+_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def conn() -> sqlite3.Connection:
+def _connect_sqlite():
+    connection = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA journal_mode=WAL")
+    return connection
+
+
+def _connect_postgres():
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+    except ImportError as exc:
+        raise RuntimeError(
+            "DATABASE_URL is set but psycopg is not installed; install requirements.txt"
+        ) from exc
+
+    dsn = DATABASE_URL
+    if dsn.startswith("postgres://"):
+        dsn = "postgresql://" + dsn[len("postgres://"):]
+    if "sslmode=" not in dsn:
+        dsn += ("&" if "?" in dsn else "?") + "sslmode=require"
+    # Autocommit keeps standalone SELECTs from leaving a shared connection in
+    # an open transaction. tx() explicitly brackets multi-statement writes.
+    connection = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
+    try:
+        with connection.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.leads') AS table_name")
+            if not cur.fetchone()["table_name"]:
+                raise RuntimeError(
+                    "Supabase schema is missing: apply "
+                    "supabase/migrations/20261023000100_autosdr_initial_schema.sql first"
+                )
+    except Exception:
+        connection.close()
+        raise
+    return connection
+
+
+def _convert_placeholders(sql: str) -> str:
+    """Convert SQLite ? placeholders to psycopg %s, ignoring quoted text/comments."""
+    out = []
+    i = 0
+    quote = None
+    while i < len(sql):
+        ch = sql[i]
+        if quote:
+            out.append(ch)
+            if ch == quote:
+                # SQL escapes quote characters by doubling them.
+                if i + 1 < len(sql) and sql[i + 1] == quote:
+                    out.append(sql[i + 1])
+                    i += 1
+                else:
+                    quote = None
+            elif ch == "\\\\" and quote == "'":
+                # Be conservative with backslash-escaped strings.
+                if i + 1 < len(sql):
+                    out.append(sql[i + 1])
+                    i += 1
+            i += 1
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            out.append(ch)
+        elif ch == "-" and i + 1 < len(sql) and sql[i + 1] == "-":
+            end = sql.find("\n", i)
+            if end < 0:
+                out.append(sql[i:])
+                break
+            out.append(sql[i:end + 1])
+            i = end
+        elif ch == "/" and i + 1 < len(sql) and sql[i + 1] == "*":
+            end = sql.find("*/", i + 2)
+            if end < 0:
+                out.append(sql[i:])
+                break
+            out.append(sql[i:end + 2])
+            i = end + 1
+        elif ch == "?":
+            out.append("%s")
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def conn():
+    """Return the process-wide connection, initializing SQLite only when needed."""
     global _conn
-    if _conn is None:
-        _conn = _connect()
-        _conn.executescript(SCHEMA)
-        _conn.commit()
-    return _conn
+    with _lock:
+        if _conn is None:
+            if DATABASE_URL:
+                _conn = _connect_postgres()
+            else:
+                _conn = _connect_sqlite()
+                _conn.executescript(SCHEMA)
+                _conn.commit()
+        return _conn
 
 
 @contextmanager
 def tx():
-    c = conn()
-    try:
-        yield c
-        c.commit()
-    except Exception:
-        c.rollback()
-        raise
+    """Serialize access to the shared connection and commit or roll back atomically."""
+    with _lock:
+        c = conn()
+        postgres = bool(DATABASE_URL)
+        try:
+            if postgres:
+                c.execute("BEGIN")
+            yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
 
 
 def new_id() -> str:
@@ -94,31 +191,49 @@ def now() -> float:
     return time.time()
 
 
-# ── helpers ──────────────────────────────────────────────────────────────
+def _ident(name: str) -> str:
+    if not _IDENTIFIER.fullmatch(name):
+        raise ValueError(f"invalid SQL identifier: {name!r}")
+    return name
+
+
+def _execute(connection, sql: str, args=()):
+    if DATABASE_URL:
+        sql = _convert_placeholders(sql)
+    return connection.execute(sql, args)
+
 
 def insert(table: str, row: dict) -> str:
+    table = _ident(table)
     row = dict(row)
     row.setdefault("id", new_id())
-    keys = ",".join(row)
-    ph = ",".join("?" for _ in row)
+    keys = [_ident(k) for k in row]
+    columns = ",".join(keys)
+    placeholders = ",".join("?" for _ in keys)
     with tx() as c:
-        c.execute(f"INSERT INTO {table} ({keys}) VALUES ({ph})", list(row.values()))
+        _execute(c, f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", list(row.values()))
     return row["id"]
 
 
 def update(table: str, id_: str, fields: dict):
-    sets = ",".join(f"{k}=?" for k in fields)
+    table = _ident(table)
+    if not fields:
+        return
+    keys = [_ident(k) for k in fields]
+    sets = ",".join(f"{k}=?" for k in keys)
     with tx() as c:
-        c.execute(f"UPDATE {table} SET {sets} WHERE id=?", [*fields.values(), id_])
+        _execute(c, f"UPDATE {table} SET {sets} WHERE id=?", [*fields.values(), id_])
 
 
 def rows(sql: str, args: tuple = ()) -> list[dict]:
-    return [dict(r) for r in conn().execute(sql, args).fetchall()]
+    with _lock:
+        return [dict(r) for r in _execute(conn(), sql, args).fetchall()]
 
 
 def one(sql: str, args: tuple = ()) -> dict | None:
-    r = conn().execute(sql, args).fetchone()
-    return dict(r) if r else None
+    with _lock:
+        row = _execute(conn(), sql, args).fetchone()
+        return dict(row) if row else None
 
 
 def kv_get(k: str, default=None):
@@ -128,7 +243,8 @@ def kv_get(k: str, default=None):
 
 def kv_set(k: str, v):
     with tx() as c:
-        c.execute(
+        _execute(
+            c,
             "INSERT INTO kv (k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
             (k, json.dumps(v)),
         )
