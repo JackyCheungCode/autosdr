@@ -463,65 +463,21 @@ export default {
           return json({ok:false,error:"search_provider_not_configured",message:"未配置 Tavily 或 Serper 搜索密钥。"},503,headers);
         }
         const now=Date.now()/1000, saved=[], processed=[];
-        const scoringSchema={type:"object",additionalProperties:false,properties:{
-          score:{type:"integer",minimum:0,maximum:100},
-          qualified:{type:"boolean"},
-          industry_fit:{type:"integer",minimum:0,maximum:40},
-          buying_signal:{type:"integer",minimum:0,maximum:30},
-          evidence_quality:{type:"integer",minimum:0,maximum:20},
-          target_market_fit:{type:"integer",minimum:0,maximum:10},
-          reasons:{type:"array",items:{type:"string"}},
-          summary:{type:"string"},
-          next_step:{type:"string"}
-        },required:["score","qualified","industry_fit","buying_signal","evidence_quality","target_market_fit","reasons","summary","next_step"]};
+        await supabaseRequest(env,"events",{},null,{method:"POST",body:{ts:now,agent:"discovery",type:"plan",label:"开始搜索目标客户，正在请求搜索服务",lead_id:null,payload:JSON.stringify({provider,query,requested})}});
         for (const item of results) {
           if (!item.name || !item.url) continue;
           let parsed; try { parsed=new URL(item.url); } catch { continue; }
           if (!/^https?:$/.test(parsed.protocol)) continue;
           const domain=parsed.hostname.replace(/^www\./,"");
-          const existing=await supabaseRequest(env,"leads",{select:"id,name,stage,score",domain:`eq.${domain}`,limit:"1"});
-          if (existing.length) { processed.push({id:existing[0].id,name:existing[0].name,domain,duplicate:true,stage:existing[0].stage,score:existing[0].score}); continue; }
-          let evidence=String(item.content||"").slice(0,2500);
-          try {
-            const site=await fetch(parsed.origin,{headers:{"user-agent":"HephaestusLeadResearch/1.0"},signal:AbortSignal.timeout(4500)});
-            if(site.ok){
-              const html=(await site.text()).slice(0,18000).replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/\s+/g," ").trim();
-              if(html) evidence=(evidence+"\\nWebsite evidence: "+html).slice(0,5000);
-            }
-          } catch {}
-          const scoreResult=await runStructuredAi(env,
-            "Score a B2B prospect for an industrial valve exporter. Use only supplied search and website evidence. Do not assume the company buys valves unless evidence supports it. Industry fit max 40, buying signals max 30, evidence quality max 20, target market fit max 10. Qualified must be true only when score >= 70 and evidence supports a plausible industrial valve buyer, importer, distributor, equipment manufacturer, or engineering contractor. If evidence is weak, score conservatively and list that uncertainty.",
-            JSON.stringify({company:item.name,website:parsed.origin,domain,icp,product:profile?.what_we_sell||"industrial valves",search_evidence:item.content||"",website_evidence:evidence}),
-            "prospect_score",scoringSchema);
-          const score=Math.max(0,Math.min(100,Number(scoreResult.score)||0));
-          const qualified=Boolean(scoreResult.qualified)&&score>=70;
-          const stage=qualified?"qualified":"potential";
+          const existing=await supabaseRequest(env,"leads",{select:"id,name,stage,score",domain:"eq."+domain,limit:"1"});
+          if(existing.length){processed.push({id:existing[0].id,name:existing[0].name,domain,duplicate:true,stage:existing[0].stage,score:existing[0].score});continue;}
           const id=crypto.randomUUID();
-          await supabaseRequest(env,"leads",{},null,{method:"POST",body:{
-            id,name:item.name.slice(0,240),domain,website:parsed.origin,
-            location:String(icp.location||"").slice(0,160),
-            industry:String((icp.industries||[]).slice(0,3).join(", ")).slice(0,240),
-            size_hint:String(icp.company_size||"").slice(0,120),
-            source:provider,stage,score,
-            score_reasons:JSON.stringify({industry_fit:scoreResult.industry_fit,buying_signal:scoreResult.buying_signal,evidence_quality:scoreResult.evidence_quality,target_market_fit:scoreResult.target_market_fit,reasons:scoreResult.reasons,summary:scoreResult.summary,next_step:scoreResult.next_step}),
-            service:String(profile?.what_we_sell||"industrial valves").slice(0,240),
-            research:evidence,created_ts:now,updated_ts:now
-          }});
-          const result={id,name:item.name,domain,website:parsed.origin,source:provider,stage,score,qualified,reasons:scoreResult.reasons};
-          saved.push(result); processed.push(result);
-          await supabaseRequest(env,"events",{},null,{method:"POST",body:{
-            ts:Date.now()/1000,agent:"research_scoring",type:"success",
-            label:`Researched and scored ${item.name.slice(0,100)}: ${score}/100 (${stage})`,
-            lead_id:id,payload:JSON.stringify({score,qualified,reasons:scoreResult.reasons,domain})
-          }});
+          await supabaseRequest(env,"leads",{},null,{method:"POST",body:{id,name:item.name.slice(0,240),domain,website:parsed.origin,location:String(icp.location||"").slice(0,160),industry:String((icp.industries||[]).slice(0,3).join(", ")).slice(0,240),size_hint:String(icp.company_size||"").slice(0,120),source:provider,stage:"discovered",score:null,score_reasons:null,service:String(profile?.what_we_sell||"").slice(0,240),research:String(item.content||"").slice(0,5000),created_ts:Date.now()/1000,updated_ts:Date.now()/1000}});
+          const itemResult={id,name:item.name,domain,website:parsed.origin,source:provider,stage:"discovered",score:null,analyzed:false};saved.push(itemResult);processed.push(itemResult);
+          await supabaseRequest(env,"events",{},null,{method:"POST",body:{ts:Date.now()/1000,agent:"discovery",type:"success",label:"已保存客户线索："+item.name.slice(0,100),lead_id:id,payload:JSON.stringify({domain,provider})}});
         }
-        await supabaseRequest(env,"events",{},null,{method:"POST",body:{
-          ts:Date.now()/1000,agent:"discovery",type:saved.length?"success":"warning",
-          label:`Search and scoring completed via ${provider}: ${saved.length} new prospects processed`,
-          lead_id:saved[0]?.id||null,
-          payload:JSON.stringify({provider,query,requested,received:results.length,saved:saved.length,processed:processed.length,qualified:saved.filter(x=>x.qualified).length})
-        }});
-        return json({ok:true,status:"discovery_research_scoring_complete",provider,requested,received:results.length,saved:saved.length,processed:processed.length,qualified:saved.filter(x=>x.qualified).length,leads:processed,emails_sent:0,message:"搜索、官网证据收集和 AI 评分已执行；未发送邮件。"},200,headers);
+        await supabaseRequest(env,"events",{},null,{method:"POST",body:{ts:Date.now()/1000,agent:"discovery",type:saved.length?"success":"warning",label:"搜索完成："+saved.length+" 条新线索已保存；AI 分析需手动启动",lead_id:saved[0]?.id||null,payload:JSON.stringify({provider,query,requested,received:results.length,saved:saved.length,duplicates:processed.filter(x=>x.duplicate).length})}});
+        return json({ok:true,status:"discovery_complete",provider,requested,received:results.length,saved:saved.length,processed:processed.length,qualified:0,leads:processed,emails_sent:0,message:"搜索完成并保存线索；AI 分析需在客户详情中手动启动，未发送邮件。"},200,headers);
       } catch (error) {
         const msg=String(error?.message||"run_failed");
         const code=msg.startsWith("tavily_http_")||msg.startsWith("serper_http_")?"search_provider_failed":msg.startsWith("Supabase")?"database_write_failed":"run_failed";
@@ -700,6 +656,30 @@ export default {
       } catch { return json({ ok: false, error: "database_unavailable" }, 503, headers); }
     }
 
+    const analyzeMatch = url.pathname.match(/^\/api\/leads\/([^/]+)\/analyze$/);
+    if (request.method === "POST" && analyzeMatch) {
+      const leadId=decodeURIComponent(analyzeMatch[1]);
+      try {
+        const rows=await supabaseRequest(env,"leads",{select:"*",id:"eq."+leadId,limit:"1"});
+        if(!rows.length)return json({ok:false,error:"not_found",message:"找不到客户线索。"},404,headers);
+        const lead=rows[0];
+        await supabaseRequest(env,"events",{},null,{method:"POST",body:{ts:Date.now()/1000,agent:"ai_analysis",type:"plan",label:"开始 AI 分析："+String(lead.name||lead.domain).slice(0,100),lead_id:leadId,payload:"{}"}});
+        let evidence=String(lead.research||"").slice(0,5000);
+        if(lead.website){try{const site=await fetch(lead.website,{headers:{"user-agent":"HephaestusLeadResearch/1.0"},signal:AbortSignal.timeout(5000)});if(site.ok){const html=(await site.text()).slice(0,18000).replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/\s+/g," ").trim();if(html)evidence=(evidence+"\nWebsite evidence: "+html).slice(0,8000);}}catch{}}
+        const icp=await getKv(env,"icp",{}), profile=await getKv(env,"company_profile",{});
+        const schema={type:"object",additionalProperties:false,properties:{score:{type:"integer",minimum:0,maximum:100},qualified:{type:"boolean"},industry_fit:{type:"integer",minimum:0,maximum:40},buying_signal:{type:"integer",minimum:0,maximum:30},evidence_quality:{type:"integer",minimum:0,maximum:20},target_market_fit:{type:"integer",minimum:0,maximum:10},reasons:{type:"array",items:{type:"string"}},summary:{type:"string"},next_step:{type:"string"}},required:["score","qualified","industry_fit","buying_signal","evidence_quality","target_market_fit","reasons","summary","next_step"]};
+        const result=await runStructuredAi(env,"Score this B2B prospect using only provided evidence. Industry fit max 40, buying signals max 30, evidence quality max 20, target market fit max 10. Qualified only if score >= 70 and evidence supports a plausible buyer, importer, distributor, manufacturer, or engineering contractor. Be conservative.",JSON.stringify({company:lead.name,website:lead.website,domain:lead.domain,icp,product:profile?.what_we_sell||lead.service||"export products",evidence}),"prospect_score",schema);
+        const score=Math.max(0,Math.min(100,Number(result.score)||0)), qualified=Boolean(result.qualified)&&score>=70, stage=qualified?"qualified":"potential";
+        const reasons={industry_fit:result.industry_fit,buying_signal:result.buying_signal,evidence_quality:result.evidence_quality,target_market_fit:result.target_market_fit,reasons:result.reasons,summary:result.summary,next_step:result.next_step};
+        await supabaseRequest(env,"leads",{id:"eq."+leadId},null,{method:"PATCH",body:{stage,score,score_reasons:JSON.stringify(reasons),research:evidence,updated_ts:Date.now()/1000}});
+        await supabaseRequest(env,"events",{},null,{method:"POST",body:{ts:Date.now()/1000,agent:"ai_analysis",type:"success",label:"AI 分析完成："+String(lead.name).slice(0,80)+"，评分 "+score+"/100",lead_id:leadId,payload:JSON.stringify({score,qualified,reasons})}});
+        return json({ok:true,score,qualified,stage,reasons,message:"AI 分析完成"},200,headers);
+      } catch(error) {
+        const msg=String(error?.message||"analysis_failed");
+        try{await supabaseRequest(env,"events",{},null,{method:"POST",body:{ts:Date.now()/1000,agent:"ai_analysis",type:"error",label:"AI 分析失败："+msg.slice(0,140),lead_id:leadId,payload:"{}"}});}catch{}
+        return json({ok:false,error:"analysis_failed",message:"AI 分析失败，请检查 AI 配置并查看运行日志。"},502,headers);
+      }
+    }
     const leadMatch = url.pathname.match(/^\/api\/leads\/([^/]+)$/);
     if (request.method === "GET" && leadMatch) {
       try {
