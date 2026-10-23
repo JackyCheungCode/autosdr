@@ -158,6 +158,15 @@ export default {
       return new Response(null, { status: 204, headers });
     }
 
+    if (url.pathname.startsWith("/api/")) {
+      if (!env.API_PROXY_TOKEN) {
+        return json({ ok: false, error: "api_proxy_not_configured" }, 503, headers);
+      }
+      if (request.headers.get("x-autosdr-proxy-token") !== env.API_PROXY_TOKEN) {
+        return json({ ok: false, error: "unauthorized" }, 401, headers);
+      }
+    }
+
     if (url.pathname === "/api/health" && request.method === "GET") {
       try {
         await supabaseRequest(env, "kv", { select: "k", limit: "1" });
