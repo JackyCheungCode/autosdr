@@ -96,7 +96,7 @@ async function generateCompanyProfile(env, sourceName, sourceText) {
     chunks.push({ id: `text-${chunks.length + 1}`, text: sourceText.slice(i, i + 7000) });
   }
   const doc = chunks.map(chunk => `[${chunk.id}] ${chunk.text}`).join("\\n\\n").slice(0, 90000);
-  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/$/, "") + "/chat/completions";
+  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
