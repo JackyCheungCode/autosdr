@@ -9,7 +9,7 @@ This is an incremental deployment scaffold, not a completed port of the FastAPI 
 3. The migration enables RLS and grants table access only to `service_role`. Browser keys must not be used for server-side data access.
 4. The migration retains embedding data as `BYTEA` until the current embedding model and vector dimension are confirmed.
 
-## 1a. Import existing SQLite data (optional)
+## 1a. Python/FastAPI PostgreSQL adapter (separate from the Worker)\n\nThe legacy Python application can use Supabase PostgreSQL by setting a server-side `DATABASE_URL` connection string (use the Supabase PostgreSQL connection details and TLS). Install `requirements.txt`, apply the SQL migration first, then run the FastAPI app in a Python-compatible host. If `DATABASE_URL` is unset, the app continues to use local SQLite. Never put this URL or database password in frontend variables. This adapter does **not** make FastAPI routes run inside Cloudflare Workers; those routes still need a separate port. A real Supabase connection has not been tested from this repository.\n\n## 1b. Import existing SQLite data (optional)
 
 Make a copy of `data/autosdr.db` from the machine that currently runs AutoSDR. Install the existing Python requirements, then run a dry run first:
 
@@ -61,6 +61,6 @@ The existing frontend calls the FastAPI routes directly. Until API endpoints are
 ## 4. Current limitations
 
 - No FastAPI business routes have been ported.
-- No PostgreSQL adapter or data import script is included yet.
+- The Python/FastAPI code now has a dual SQLite/PostgreSQL adapter; it has not been verified against a live Supabase project. The JavaScript Worker still does not serve the FastAPI business routes.
 - Scheduler, IMAP, PDF/RAG, booking, and SSE migration remain open.
 - No production deployment has been performed from this repository.
