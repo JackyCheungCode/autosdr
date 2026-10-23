@@ -74,3 +74,6 @@ The existing frontend calls FastAPI routes directly. The read-only dashboard end
 ## ICP generation
 
 `POST /api/icp` requires a saved `company_profile` in Supabase `kv` and accepts JSON or form fields `location`, `industry`, `size`, and `targeting`. Configure Worker secrets `OPENAI_API_KEY` and `OPENAI_MODEL`; optionally `OPENAI_BASE_URL` for an OpenAI-compatible endpoint. Keep all credentials server-side. Tests mock the LLM and Supabase calls; live provider compatibility is not yet verified.
+
+
+`POST /api/company/text` accepts `name` and `text` (JSON or form fields), creates a structured company profile with the configured LLM, and stores it in Supabase `kv`. This initial Worker path stores the source chunks in `company_profile_source`; it does not yet implement PDF upload parsing or the original embedding/RAG pipeline.
