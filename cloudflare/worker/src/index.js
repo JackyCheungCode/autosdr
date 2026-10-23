@@ -207,6 +207,75 @@ async function getKv(env, key, fallback = null) {
   try { return JSON.parse(rows[0].v); } catch { return rows[0].v; }
 }
 
+function sseEvent(event) {
+  return `id: ${event.seq}\ndata: ${JSON.stringify(event)}\n\n`;
+}
+
+function eventsStream(env, headers, request) {
+  let cancelled = false;
+  let timer = null;
+  let lastSeq = 0;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (text) => {
+        if (!cancelled) controller.enqueue(encoder.encode(text));
+      };
+      const wait = (ms) => new Promise((resolve) => {
+        timer = setTimeout(resolve, ms);
+      });
+      try {
+        const initial = await supabaseRequest(env, "events", {
+          select: "seq,ts,agent,type,label,lead_id,payload",
+          order: "seq.desc",
+          limit: "100",
+        });
+        if (!Array.isArray(initial)) throw new Error("Unexpected events response");
+        for (const event of initial.reverse()) {
+          lastSeq = Math.max(lastSeq, Number(event.seq) || 0);
+          send(sseEvent(event));
+        }
+        let lastKeepalive = Date.now();
+        while (!cancelled) {
+          await wait(3000);
+          if (cancelled) break;
+          const rows = await supabaseRequest(env, "events", {
+            select: "seq,ts,agent,type,label,lead_id,payload",
+            seq: `gt.${lastSeq}`,
+            order: "seq.asc",
+            limit: "100",
+          });
+          if (!Array.isArray(rows)) throw new Error("Unexpected events response");
+          for (const event of rows) {
+            lastSeq = Math.max(lastSeq, Number(event.seq) || 0);
+            send(sseEvent(event));
+          }
+          if (Date.now() - lastKeepalive >= 15000) {
+            send(": keepalive\\n\\n");
+            lastKeepalive = Date.now();
+          }
+        }
+      } catch {
+        send(`event: error\\ndata: ${JSON.stringify({ error: "event_stream_unavailable" })}\\n\\n`);
+        if (!cancelled) controller.close();
+      }
+    },
+    cancel() {
+      cancelled = true;
+      if (timer !== null) clearTimeout(timer);
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      ...headers,
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      "x-accel-buffering": "no",
+    },
+  });
+}
+
 function parseJsonFields(row, fields) {
   const out = { ...row };
   for (const field of fields) {
@@ -300,6 +369,10 @@ export default {
       if (request.headers.get("x-autosdr-proxy-token") !== env.API_PROXY_TOKEN) {
         return json({ ok: false, error: "unauthorized" }, 401, headers);
       }
+    }
+
+    if (url.pathname === "/api/events/stream" && request.method === "GET") {
+      return eventsStream(env, headers, request);
     }
 
     if (url.pathname === "/api/health" && request.method === "GET") {
