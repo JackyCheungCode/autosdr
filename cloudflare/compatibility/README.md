@@ -13,7 +13,7 @@ This folder records evidence required before calling the Cloudflare migration co
 | RAG | NumPy embeddings serialized as SQLite BLOB | Preserve bytes initially; confirm model/dimension before pgvector migration | Not migrated |
 | SSE | FastAPI `StreamingResponse` and in-process event bus | Validate Worker streaming limits and replace process-local event bus for durable/shared state | Not migrated |
 | Email/IMAP | SMTP/IMAP libraries and polling | Outbound email provider/API plus scheduled inbox integration; raw IMAP support is not assumed | Not migrated |
-| Static frontend | `app/static/index.html`, `book.html` | Cloudflare Pages static deployment | Deployment instructions added separately |
+| Static frontend | `app/static/index.html`, `book.html` call relative `/api/*` routes | Cloudflare Pages static deployment plus a same-origin Pages Function proxy to the Worker | Proxy scaffold added; not yet tested in a deployed Pages project |
 
 ## How to run checks
 
