@@ -71,6 +71,21 @@ test("SSE stream replays recent Supabase events and emits standard event IDs", a
   }
 });
 
+test("SSE stream formats upstream errors as parseable SSE frames", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+  try {
+    const response = await worker.fetch(request("/api/events/stream"), configuredEnv);
+    const reader = response.body.getReader();
+    const first = await reader.read();
+    const chunk = new TextDecoder().decode(first.value);
+    assert.match(chunk, /^event: error\\ndata: \\{"error":"event_stream_unavailable"\\}\\n\\n$/);
+    await reader.cancel();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("unapproved production origins do not receive CORS permission", async () => {
   const req = request("/api/health", {
     headers: { Origin: "https://attacker.example" },
