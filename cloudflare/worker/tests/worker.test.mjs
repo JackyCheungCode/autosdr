@@ -40,7 +40,7 @@ test("health reports configuration presence without returning secret values", as
 });
 
 test("lead discovery requires a saved ICP before searching and never pretends to start", async () => {
-  const response = await worker.fetch(request("/api/run", { method: "POST" }), configuredEnv);
+  const response = await worker.fetch(request("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), configuredEnv);
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, "icp_required");
 });
