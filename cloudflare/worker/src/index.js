@@ -462,31 +462,66 @@ export default {
         } else {
           return json({ok:false,error:"search_provider_not_configured",message:"未配置 Tavily 或 Serper 搜索密钥。"},503,headers);
         }
-        const now=Date.now()/1000, saved=[];
+        const now=Date.now()/1000, saved=[], processed=[];
+        const scoringSchema={type:"object",additionalProperties:false,properties:{
+          score:{type:"integer",minimum:0,maximum:100},
+          qualified:{type:"boolean"},
+          industry_fit:{type:"integer",minimum:0,maximum:40},
+          buying_signal:{type:"integer",minimum:0,maximum:30},
+          evidence_quality:{type:"integer",minimum:0,maximum:20},
+          target_market_fit:{type:"integer",minimum:0,maximum:10},
+          reasons:{type:"array",items:{type:"string"}},
+          summary:{type:"string"},
+          next_step:{type:"string"}
+        },required:["score","qualified","industry_fit","buying_signal","evidence_quality","target_market_fit","reasons","summary","next_step"]};
         for (const item of results) {
           if (!item.name || !item.url) continue;
           let parsed; try { parsed=new URL(item.url); } catch { continue; }
           if (!/^https?:$/.test(parsed.protocol)) continue;
           const domain=parsed.hostname.replace(/^www\./,"");
+          const existing=await supabaseRequest(env,"leads",{select:"id,name,stage,score",domain:`eq.${domain}`,limit:"1"});
+          if (existing.length) { processed.push({id:existing[0].id,name:existing[0].name,domain,duplicate:true,stage:existing[0].stage,score:existing[0].score}); continue; }
+          let evidence=String(item.content||"").slice(0,2500);
+          try {
+            const site=await fetch(parsed.origin,{headers:{"user-agent":"HephaestusLeadResearch/1.0"},signal:AbortSignal.timeout(4500)});
+            if(site.ok){
+              const html=(await site.text()).slice(0,18000).replace(/<script[\\s\\S]*?<\\/script>/gi," ").replace(/<style[\\s\\S]*?<\\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/g," ").replace(/&amp;/g,"&").replace(/\\s+/g," ").trim();
+              if(html) evidence=(evidence+"\\nWebsite evidence: "+html).slice(0,5000);
+            }
+          } catch {}
+          const scoreResult=await runStructuredAi(env,
+            "Score a B2B prospect for an industrial valve exporter. Use only supplied search and website evidence. Do not assume the company buys valves unless evidence supports it. Industry fit max 40, buying signals max 30, evidence quality max 20, target market fit max 10. Qualified must be true only when score >= 70 and evidence supports a plausible industrial valve buyer, importer, distributor, equipment manufacturer, or engineering contractor. If evidence is weak, score conservatively and list that uncertainty.",
+            JSON.stringify({company:item.name,website:parsed.origin,domain,icp,product:profile?.what_we_sell||"industrial valves",search_evidence:item.content||"",website_evidence:evidence}),
+            "prospect_score",scoringSchema);
+          const score=Math.max(0,Math.min(100,Number(scoreResult.score)||0));
+          const qualified=Boolean(scoreResult.qualified)&&score>=70;
+          const stage=qualified?"qualified":"potential";
           const id=crypto.randomUUID();
-          const rows=await supabaseRequest(env,"leads",{},null,{method:"POST",body:{
+          await supabaseRequest(env,"leads",{},null,{method:"POST",body:{
             id,name:item.name.slice(0,240),domain,website:parsed.origin,
             location:String(icp.location||"").slice(0,160),
             industry:String((icp.industries||[]).slice(0,3).join(", ")).slice(0,240),
             size_hint:String(icp.company_size||"").slice(0,120),
-            source:provider,stage:"discovered",score:null,score_reasons:null,
+            source:provider,stage,score,
+            score_reasons:JSON.stringify({industry_fit:scoreResult.industry_fit,buying_signal:scoreResult.buying_signal,evidence_quality:scoreResult.evidence_quality,target_market_fit:scoreResult.target_market_fit,reasons:scoreResult.reasons,summary:scoreResult.summary,next_step:scoreResult.next_step}),
             service:String(profile?.what_we_sell||"industrial valves").slice(0,240),
-            research:String(item.content||"").slice(0,3000),created_ts:now,updated_ts:now
+            research:evidence,created_ts:now,updated_ts:now
           }});
-          saved.push({id,name:item.name,domain,website:parsed.origin,source:provider});
+          const result={id,name:item.name,domain,website:parsed.origin,source:provider,stage,score,qualified,reasons:scoreResult.reasons};
+          saved.push(result); processed.push(result);
+          await supabaseRequest(env,"events",{},null,{method:"POST",body:{
+            ts:Date.now()/1000,agent:"research_scoring",type:"success",
+            label:`Researched and scored ${item.name.slice(0,100)}: ${score}/100 (${stage})`,
+            lead_id:id,payload:JSON.stringify({score,qualified,reasons:scoreResult.reasons,domain})
+          }});
         }
         await supabaseRequest(env,"events",{},null,{method:"POST",body:{
-          ts:now,agent:"discovery",type:saved.length?"success":"warning",
-          label:`Search completed via ${provider}: ${saved.length} candidate companies saved`,
+          ts:Date.now()/1000,agent:"discovery",type:saved.length?"success":"warning",
+          label:`Search and scoring completed via ${provider}: ${saved.length} new prospects processed`,
           lead_id:saved[0]?.id||null,
-          payload:JSON.stringify({provider,query,requested,received:results.length,saved:saved.length})
+          payload:JSON.stringify({provider,query,requested,received:results.length,saved:saved.length,processed:processed.length,qualified:saved.filter(x=>x.qualified).length})
         }});
-        return json({ok:true,status:"discovery_complete",provider,requested,received:results.length,saved:saved.length,leads:saved,emails_sent:0,message:saved.length?"真实搜索结果已写入客户表；尚未执行研究、评分或发送邮件。":"搜索完成，但没有可保存的有效公司结果。"},200,headers);
+        return json({ok:true,status:"discovery_research_scoring_complete",provider,requested,received:results.length,saved:saved.length,processed:processed.length,qualified:saved.filter(x=>x.qualified).length,leads:processed,emails_sent:0,message:"搜索、官网证据收集和 AI 评分已执行；未发送邮件。"},200,headers);
       } catch (error) {
         const msg=String(error?.message||"run_failed");
         const code=msg.startsWith("tavily_http_")||msg.startsWith("serper_http_")?"search_provider_failed":msg.startsWith("Supabase")?"database_write_failed":"run_failed";
