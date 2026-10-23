@@ -85,10 +85,46 @@ const COMPANY_PROFILE_SCHEMA = {
     "case_studies", "pricing_notes", "limitations", "differentiators"],
 };
 
+const DEFAULT_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+
+async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema) {
+  if (!env.AI || typeof env.AI.run !== "function") {
+    const error = new Error("ai_not_configured");
+    error.code = "ai_not_configured";
+    throw error;
+  }
+  const model = env.AI_MODEL || DEFAULT_AI_MODEL;
+  const result = await env.AI.run(model, {
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: schemaName, strict: true, schema },
+    },
+    max_tokens: 1800,
+    temperature: 0.2,
+  });
+  const content = result?.response ?? result?.choices?.[0]?.message?.content;
+  if (typeof content === "string") {
+    try { return JSON.parse(content); }
+    catch {
+      const start = content.indexOf("{");
+      const end = content.lastIndexOf("}");
+      if (start >= 0 && end > start) {
+        try { return JSON.parse(content.slice(start, end + 1)); } catch { /* handled below */ }
+      }
+    }
+  }
+  if (content && typeof content === "object" && !Array.isArray(content)) return content;
+  throw new Error("Workers AI returned invalid structured output");
+}
+
 async function generateCompanyProfile(env, sourceName, sourceText) {
-  if (!env.OPENAI_API_KEY || !env.OPENAI_MODEL) {
-    const error = new Error("llm_not_configured");
-    error.code = "llm_not_configured";
+  if (!env.AI || typeof env.AI.run !== "function") {
+    const error = new Error("ai_not_configured");
+    error.code = "ai_not_configured";
     throw error;
   }
   const chunks = [];
@@ -96,24 +132,13 @@ async function generateCompanyProfile(env, sourceName, sourceText) {
     chunks.push({ id: `text-${chunks.length + 1}`, text: sourceText.slice(i, i + 7000) });
   }
   const doc = chunks.map(chunk => `[${chunk.id}] ${chunk.text}`).join("\\n\\n").slice(0, 90000);
-  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: env.OPENAI_MODEL,
-      messages: [
-        { role: "system", content: "Extract a faithful company profile from the supplied document. Use only facts present; never invent services, clients, numbers or claims. Cite chunk IDs for services and case studies. If pricing is absent, say so. Include promises sales must never make in limitations." },
-        { role: "user", content: `Source name: ${sourceName}\\nDocument chunks:\\n\\n${doc}` },
-      ],
-      response_format: { type: "json_schema", json_schema: { name: "company_profile", strict: true, schema: COMPANY_PROFILE_SCHEMA } },
-    }),
-  });
-  if (!response.ok) throw new Error("LLM request failed");
-  const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("LLM returned no structured profile");
-  const profile = JSON.parse(content);
+  const profile = await runStructuredAi(
+    env,
+    "Extract a faithful company profile from the supplied document. Use only facts present; never invent services, clients, numbers or claims. Cite chunk IDs for services and case studies. If pricing is absent, say so. Include promises sales must never make in limitations.",
+    `Source name: ${sourceName}\\nDocument chunks:\\n\\n${doc}`,
+    "company_profile",
+    COMPANY_PROFILE_SCHEMA,
+  );
   if (!Array.isArray(profile.services) || !Array.isArray(profile.case_studies) ||
       !Array.isArray(profile.target_industries) || !Array.isArray(profile.limitations)) {
     throw new Error("LLM returned invalid company profile");
@@ -137,29 +162,18 @@ const REPLY_CLASSIFICATION_SCHEMA = {
 };
 
 async function classifyReply(env, lead, contact, subject, body) {
-  if (!env.OPENAI_API_KEY || !env.OPENAI_MODEL) {
-    const error = new Error("llm_not_configured");
-    error.code = "llm_not_configured";
+  if (!env.AI || typeof env.AI.run !== "function") {
+    const error = new Error("ai_not_configured");
+    error.code = "ai_not_configured";
     throw error;
   }
-  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: env.OPENAI_MODEL,
-      messages: [
-        { role: "system", content: "Classify a prospect's email reply. Use meeting_requested for a request to talk, see a demo, or pick a time. Separate pricing and technical objections. Do not draft or send a response." },
-        { role: "user", content: `Company: ${lead?.name || "unknown"}; contact role: ${contact?.role || "unknown"}\\nSubject: ${subject}\\nReply: ${body.slice(0, 5000)}` },
-      ],
-      response_format: { type: "json_schema", json_schema: { name: "reply_classification", strict: true, schema: REPLY_CLASSIFICATION_SCHEMA } },
-    }),
-  });
-  if (!response.ok) throw new Error("LLM request failed");
-  const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("LLM returned no classification");
-  const result = JSON.parse(content);
+  const result = await runStructuredAi(
+    env,
+    "Classify a prospect's email reply. Use meeting_requested for a request to talk, see a demo, or pick a time. Separate pricing and technical objections. Do not draft or send a response.",
+    `Company: ${lead?.name || "unknown"}; contact role: ${contact?.role || "unknown"}\\nSubject: ${subject}\\nReply: ${body.slice(0, 5000)}`,
+    "reply_classification",
+    REPLY_CLASSIFICATION_SCHEMA,
+  );
   const categories = REPLY_CLASSIFICATION_SCHEMA.properties.category.enum;
   const sentiments = REPLY_CLASSIFICATION_SCHEMA.properties.sentiment.enum;
   if (!result || typeof result !== "object" ||
@@ -189,35 +203,18 @@ const ICP_SCHEMA = {
 };
 
 async function generateIcp(env, profile, answers) {
-  if (!env.OPENAI_API_KEY || !env.OPENAI_MODEL) {
-    const error = new Error("llm_not_configured");
-    error.code = "llm_not_configured";
+  if (!env.AI || typeof env.AI.run !== "function") {
+    const error = new Error("ai_not_configured");
+    error.code = "ai_not_configured";
     throw error;
   }
-  const endpoint = (env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "") + "/chat/completions";
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: env.OPENAI_MODEL,
-      messages: [
-        { role: "system", content: "You are an Ideal Customer Profile agent. Ground the ICP in the selling company's actual offers. Produce realistic search queries for company websites/directories, concrete disqualifiers, and useful scoring hints. Do not invent company capabilities." },
-        { role: "user", content: `Selling company: ${profile.company_name || "(unknown)"}; services: ${(profile.services || []).map(s => s.name).join("; ")}; offer: ${profile.what_we_sell || ""}\\nTarget location: ${answers.location || ""}\\nTarget industry/market: ${answers.industry || ""}\\nCompany size/criteria: ${answers.size || ""}\\nSpecial targeting: ${answers.targeting || ""}` },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "icp", strict: true, schema: ICP_SCHEMA },
-      },
-    }),
-  });
-  if (!response.ok) throw new Error("LLM request failed");
-  const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("LLM returned no structured ICP");
-  const icp = JSON.parse(content);
+  const icp = await runStructuredAi(
+    env,
+    "You are an Ideal Customer Profile agent. Ground the ICP in the selling company's actual offers. Produce realistic search queries for company websites/directories, concrete disqualifiers, and useful scoring hints. Do not invent company capabilities.",
+    `Selling company: ${profile.company_name || "(unknown)"}; services: ${(profile.services || []).map(s => s.name).join("; ")}; offer: ${profile.what_we_sell || ""}\\nTarget location: ${answers.location || ""}\\nTarget industry/market: ${answers.industry || ""}\\nCompany size/criteria: ${answers.size || ""}\\nSpecial targeting: ${answers.targeting || ""}`,
+    "icp",
+    ICP_SCHEMA,
+  );
   if (!Array.isArray(icp.industries) || !Array.isArray(icp.search_queries) ||
       !Array.isArray(icp.disqualifiers) || !Array.isArray(icp.must_have) ||
       !Array.isArray(icp.scoring_hints)) throw new Error("LLM returned invalid ICP");
@@ -459,7 +456,7 @@ export default {
         const profile = await generateCompanyProfile(env, sourceName, sourceText);
         return json({ ok: true, profile }, 200, headers);
       } catch (error) {
-        if (error?.code === "llm_not_configured") return json({ ok: false, error: "llm_not_configured" }, 503, headers);
+        if (error?.code === "ai_not_configured") return json({ ok: false, error: "ai_not_configured" }, 503, headers);
         return json({ ok: false, error: "company_profile_generation_failed" }, 502, headers);
       }
     }
@@ -479,8 +476,8 @@ export default {
         await setKv(env, "icp", icp);
         return json({ ok: true, icp }, 200, headers);
       } catch (error) {
-        if (error?.code === "llm_not_configured") {
-          return json({ ok: false, error: "llm_not_configured" }, 503, headers);
+        if (error?.code === "ai_not_configured") {
+          return json({ ok: false, error: "ai_not_configured" }, 503, headers);
         }
         return json({ ok: false, error: "icp_generation_failed" }, 502, headers);
       }
@@ -539,7 +536,7 @@ export default {
         });
         return json({ ok: true, received: true, classification, auto_reply_sent: false }, 200, headers);
       } catch (error) {
-        if (error?.code === "llm_not_configured") return json({ ok: false, error: "llm_not_configured" }, 503, headers);
+        if (error?.code === "ai_not_configured") return json({ ok: false, error: "ai_not_configured" }, 503, headers);
         return json({ ok: false, error: "reply_processing_failed" }, 502, headers);
       }
     }
