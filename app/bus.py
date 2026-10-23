@@ -30,10 +30,10 @@ def emit(agent: str, type_: str, label: str, payload: Any = None, lead_id: str |
     }
     with db.tx() as c:
         cur = c.execute(
-            "INSERT INTO events (ts,agent,type,label,lead_id,payload) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO events (ts,agent,type,label,lead_id,payload) VALUES (?,?,?,?,?,?) RETURNING seq",
             (evt["ts"], agent, type_, label, lead_id, json.dumps(payload, default=str)),
         )
-        evt["seq"] = cur.lastrowid
+        evt["seq"] = cur.fetchone()["seq"]
     if _loop is not None:
         _loop.call_soon_threadsafe(_fanout, evt)
     return evt
