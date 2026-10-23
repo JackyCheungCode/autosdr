@@ -203,6 +203,11 @@ def _execute(connection, sql: str, args=()):
     return connection.execute(sql, args)
 
 
+def execute(connection, sql: str, args=()):
+    """Execute a query through the backend-specific placeholder adapter."""
+    return _execute(connection, sql, args)
+
+
 def insert(table: str, row: dict) -> str:
     table = _ident(table)
     row = dict(row)
