@@ -182,8 +182,8 @@ test("Pages proxy injects the shared token server-side and preserves the API pat
   let seenUrl;
   let seenToken;
   globalThis.fetch = async (input, init = {}) => {
-    seenUrl = new URL(input);
-    seenToken = new Headers(init.headers).get("x-autosdr-proxy-token");
+    seenUrl = new URL(input instanceof Request ? input.url : input);
+    seenToken = new Headers(init.headers || (input instanceof Request ? input.headers : undefined)).get("x-autosdr-proxy-token");
     return Response.json({ ok: true });
   };
   try {
