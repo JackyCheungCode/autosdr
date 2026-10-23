@@ -627,8 +627,15 @@ async function loadApprovals(){
       </div></div>`).join("");
 }
 async function approveDraft(id){
-  const r=await fetch(`/api/outbox/${id}/approve`,{method:"POST"});
-  toast(r.ok?"<b>Approved</b> — email sent":"Approve failed");
+  const r=await fetch(`/api/outbox/${encodeURIComponent(id)}/approve`,{method:"POST"});
+  const result=await r.json().catch(()=>({}));
+  if(r.ok&&result.ok){
+    toast("<b>Approved</b> — email sent");
+  }else if(result.error==="not_implemented"){
+    toast("Email sending is not yet available in this deployment; the draft remains pending.");
+  }else{
+    toast(esc(result.message||result.error||"Approve failed"));
+  }
   loadApprovals(); refresh();
 }
 async function rejectDraft(id){
