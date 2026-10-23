@@ -33,7 +33,7 @@ BATCH_SIZE = 100
 def json_safe(value: Any) -> Any:
     # PostgreSQL bytea text input accepted by PostgREST.
     if isinstance(value, (bytes, bytearray, memoryview)):
-        return "\\\\x" + bytes(value).hex()
+        return chr(92) + "x" + bytes(value).hex()
     return value
 
 
