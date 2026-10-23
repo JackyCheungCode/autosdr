@@ -7,7 +7,7 @@ This folder records evidence required before calling the Cloudflare migration co
 | Area | Current implementation | Cloudflare target | Status |
 |---|---|---|---|
 | HTTP API | FastAPI in `app/main.py` | Worker handlers or a separately validated Python Workers deployment | Not migrated |
-| Persistence | `sqlite3`, one module-level connection, SQLite SQL placeholders and PRAGMA | Supabase PostgreSQL through server-side REST or a validated PostgreSQL connection path | Schema draft added; adapter not migrated |
+| Persistence | SQLite locally or psycopg PostgreSQL when `DATABASE_URL` is set; shared query helper converts placeholders | Supabase PostgreSQL using a server-side connection URL | Adapter implemented; local tests added, live Supabase connection not verified |
 | Follow-ups and inbox polling | APScheduler background daemon in `app/scheduler.py` | Cron Trigger + durable job processing; idempotency required | Not migrated |
 | PDF ingestion | `pypdf` and upload-to-local-disk flow | Validate package support and replace local disk with object storage or bounded in-memory processing | Not validated |
 | RAG | NumPy embeddings serialized as SQLite BLOB | Preserve bytes initially; confirm model/dimension before pgvector migration | Not migrated |
@@ -30,7 +30,7 @@ From the repository root, run `python -m compileall -q app` after installing `re
 ## Required release gates
 
 - [ ] Create a disposable Supabase project and apply the migration.
-- [ ] Implement and test the PostgreSQL adapter, including transaction rollback and query placeholder conversion.
+- [x] Implement the dual SQLite/PostgreSQL adapter and add local regression tests for transaction rollback, placeholder conversion, event sequence, KV JSON and embedding bytes.\n- [ ] Run tests in CI and verify against a disposable Supabase project; local adapter tests do not validate a live PostgreSQL connection.
 - [ ] Test RLS and verify the service-role key is only stored as a Worker secret.
 - [ ] Port API routes and add contract tests against the existing frontend.
 - [ ] Move scheduler work to durable scheduled jobs with retries and idempotency.
