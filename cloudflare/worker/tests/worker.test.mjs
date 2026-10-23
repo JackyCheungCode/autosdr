@@ -19,15 +19,21 @@ test("health reports configuration presence without returning secret values", as
     SUPABASE_URL: "https://example.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "SERVICE_ROLE_KEY_VALUE",
   };
-  const response = await worker.fetch(request("/api/health"), env);
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.supabase_configured, true);
-  assert.equal(JSON.stringify(body).includes("SERVICE_ROLE_KEY_VALUE"), false);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([{ k: "health-check" }]);
+  try {
+    const response = await worker.fetch(request("/api/health"), env);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.supabase_configured, true);
+    assert.equal(JSON.stringify(body).includes("SERVICE_ROLE_KEY_VALUE"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("unmigrated API endpoints fail explicitly rather than pretending to work", async () => {
-  const response = await worker.fetch(request("/api/state"), {});
+  const response = await worker.fetch(request("/api/run"), {});
   assert.equal(response.status, 501);
   assert.equal((await response.json()).error, "not_implemented");
 });
