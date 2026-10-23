@@ -282,14 +282,20 @@ test("approve draft remains disabled until email delivery is safely ported", asy
 });
 
 
-test("ICP generation fails closed when LLM credentials are not configured", async () => {
-  const response = await worker.fetch(request("/api/icp", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ location: "Germany", industry: "manufacturing" }),
-  }), configuredEnv);
-  assert.equal(response.status, 400);
-  assert.equal((await response.json()).error, "company_profile_required");
+test("ICP generation requires a company profile before calling the LLM", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([]);
+  try {
+    const response = await worker.fetch(request("/api/icp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ location: "Germany", industry: "manufacturing" }),
+    }), configuredEnv);
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, "company_profile_required");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("ICP generation uses configured LLM and persists the structured result", async () => {
