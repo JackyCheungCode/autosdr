@@ -1,0 +1,13 @@
+{
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
+  "name": "autosdr-api",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-23",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "FRONTEND_ORIGIN": "http://localhost:8788"
+  }
+}
