@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AutoSDR — Autonomous Sales Agent</title>
+<title>IBM Hephaestus — 外贸客户开发</title>
 <script>
   (function(){
     const t=localStorage.getItem("autosdr_theme");
@@ -378,6 +378,75 @@ function translateStaticUi(){
     .stat{flex:0 0 105px}
   }
 
+
+  /* IBM Carbon-inspired application shell and data table */
+  :root{--cds-blue:#0f62fe;--cds-text:#161616;--cds-layer:#fff;--cds-border:#c6c6c6;--cds-hover:#e8e8e8;--cds-muted:#525252}
+  :root[data-theme="dark"]{--cds-text:#f4f4f4;--cds-layer:#262626;--cds-border:#525252;--cds-hover:#353535;--cds-muted:#c6c6c6}
+  #side{transition:width .18s ease, padding .18s ease;overflow:hidden}
+  body.sidebar-hidden #side{width:0!important;min-width:0!important;padding:0!important;border:0!important}
+  body.sidebar-hidden #side>*{display:none!important}
+  #ibmHeader{height:48px;flex:0 0 48px;display:flex;align-items:center;gap:14px;padding:0 16px;background:#161616;color:#f4f4f4;border-bottom:1px solid #393939}
+  #sideToggle{color:#f4f4f4!important;border:0!important;background:transparent!important;padding:8px 10px!important;min-width:40px;justify-content:center}
+  #sideToggle:hover{background:#393939!important}
+  .ibmLogo{font-family:Arial,sans-serif;font-weight:900;font-size:20px;letter-spacing:-1.5px;color:#fff;border-right:1px solid #525252;padding-right:14px;line-height:1}
+  .ibmProduct{font-size:14px;font-weight:600;display:flex;gap:10px;align-items:center}
+  .ibmProduct span{font-weight:400;color:#c6c6c6}
+  .ibmHeaderSpacer{flex:1}
+  .ibmHeaderStatus{font-size:12px;color:#c6c6c6}
+  #toolbar{min-height:64px;padding:12px 20px;background:var(--surface);gap:8px;flex-wrap:wrap}
+  #toolbar h1{font-size:16px;font-weight:600}
+  #toolbar button{border-radius:0!important;min-height:40px;padding:0 16px;justify-content:center}
+  #toolbar button.primary{background:#0f62fe!important;border-color:#0f62fe!important;color:white!important}
+  #toolbar button.primary:hover{background:#0353e9!important}
+  #toolbar button.ghost{border:1px solid var(--line-strong)!important}
+  #toolbar #runstate{margin-left:auto}
+  #toolbar .switch{padding:0 8px;min-height:40px}
+  #stats{border-radius:0;margin-top:12px}
+  .stat{padding:12px 16px}
+  #boardbar{display:flex;flex-wrap:wrap;gap:12px;padding:16px 20px 12px;align-items:center}
+  #boardbar input{height:40px;width:min(280px,100%);border-radius:0!important}
+  #boardbar .minscore{width:150px}
+  #boardcount{color:var(--text2);font-size:12px}
+  #board{display:block!important;overflow:auto;padding:0 20px 24px}
+  .leads-table-wrap{width:100%;overflow:auto;border:1px solid var(--line);background:var(--surface)}
+  table.leads-table{width:100%;border-collapse:collapse;text-align:left;min-width:680px;font-size:13px}
+  .leads-table thead{background:var(--surface2)}
+  .leads-table th{font-weight:600;color:var(--text2);padding:12px 16px;border-bottom:1px solid var(--line-strong);white-space:nowrap}
+  .leads-table td{padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .leads-table tbody tr{cursor:pointer;outline-offset:-2px;transition:background .1s}
+  .leads-table tbody tr:hover{background:var(--surface2)}
+  .leads-table tbody tr:focus{outline:2px solid #0f62fe}
+  .leads-table tbody tr:last-child td{border-bottom:0}
+  .lead-name{font-weight:600;color:var(--text)}
+  .lead-domain{font-size:12px;color:var(--text2);overflow-wrap:anywhere}
+  .stage-pill{display:inline-block;padding:3px 8px;background:var(--surface2);border-left:3px solid #0f62fe;font-size:12px;white-space:nowrap}
+  .score-cell{font-weight:600;font-variant-numeric:tabular-nums}
+  .table-empty{padding:32px 16px!important;text-align:center;color:var(--text2)}
+  #drawer .toprow button,#drawer .dtabs button{border-radius:0!important}
+  button,input,textarea,select{font-family:Arial,"Noto Sans SC","Microsoft YaHei",sans-serif}
+  button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid #0f62fe!important;outline-offset:-2px}
+  @media(max-width:700px){
+    #ibmHeader{padding:0 8px;gap:8px}
+    .ibmLogo{font-size:17px;padding-right:8px}
+    .ibmProduct{font-size:12px;gap:5px}
+    .ibmHeaderStatus{display:none}
+    #toolbar{padding:10px;gap:6px}
+    #toolbar>div:first-child{width:100%}
+    #toolbar .spacer{display:none}
+    #toolbar #runstate{margin-left:0;flex:1}
+    #toolbar .switch{order:5;width:100%;justify-content:flex-start}
+    #toolbar button{flex:1;min-width:0;padding:0 8px}
+    #toolbar #tracebtn{flex:1}
+    #boardbar{padding:12px 10px;gap:8px}
+    #boardbar input{width:100%;flex:1 1 100%}
+    #boardbar .minscore{width:100%;flex:1 1 100%}
+    #board{padding:0 10px 16px}
+    .leads-table-wrap{border-left:0;border-right:0}
+    table.leads-table{min-width:600px}
+    #stats{margin-left:10px;margin-right:10px}
+    #main{grid-template-columns:minmax(0,1fr)!important}
+  }
+
 </style>
 </head>
 <body>
@@ -421,6 +490,7 @@ function translateStaticUi(){
 </aside>
 
 <div id="wrap">
+  <header id="ibmHeader"><button id="sideToggle" class="ghost" type="button" aria-label="隐藏或显示侧边栏" title="隐藏或显示侧边栏" onclick="toggleSidebar()">☰</button><div class="ibmLogo">IBM</div><div class="ibmProduct">Hephaestus <span>外贸客户开发</span></div><div class="ibmHeaderSpacer"></div><div class="ibmHeaderStatus">安全工作区</div></header>
   <div id="toolbar">
     <div><h1 id="pagetitle">Pipeline</h1><div class="sub" id="pagesub"></div></div>
     <div class="spacer"></div>
@@ -495,7 +565,7 @@ function translateStaticUi(){
             <div class="spacer"></div>
             <span id="boardcount"></span>
           </div>
-          <div id="board"></div>
+          <div id="board" role="region" aria-label="客户列表"></div>
         </div>
       </div>
 
@@ -655,35 +725,37 @@ function paintStats(){
 function paintBoard(){
   if(!STATE) return;
   const b=$("board");
-  const scrollY=b.scrollTop;
-  const colScroll={};
-  b.querySelectorAll(".col").forEach(c=>{colScroll[c.dataset.stage]=c.querySelector(".cards").scrollTop;});
-  const q=($("q").value||"").toLowerCase();
+  const q=($("q").value||"").toLowerCase().trim();
   const ms=parseInt($("minscore").value||"0",10);
-  let shown=0;
-  b.innerHTML="";
-  for(const st of STATE.stages){
-    const leads=STATE.leads.filter(x=>x.stage===st)
-      .filter(x=>!q||x.name.toLowerCase().includes(q)||(x.domain||"").includes(q))
-      .filter(x=>!ms||(x.score??100)>=ms);
-    shown+=leads.length;
-    const col=document.createElement("div");
-    col.className="col"+(NEG.has(st)?" neg":"")+(leads.length?"":" isempty"); col.dataset.stage=st;
-    col.innerHTML=`<h3>${STAGE_LABELS[st]}<span class="n">${leads.length||""}</span></h3><div class="cards"></div>`;
-    const cards=col.querySelector(".cards");
-    if(!leads.length) cards.innerHTML=`<div class="empty">·</div>`;
-    for(const l of leads){
-      const d=document.createElement("div"); d.className="card"; d.onclick=()=>openDrawer(l.id);
-      d.innerHTML=`<div class="toprow"><div class="nm">${esc(l.name)}</div>
-        ${l.score!=null?`<div class="sc">${scoreDot(l.score)}${l.score}</div>`:""}</div>
-        <div class="meta">${esc(l.domain||"")}</div>`;
-      cards.appendChild(d);
-    }
-    if(colScroll[st]) cards.scrollTop=colScroll[st];
-    b.appendChild(col);
-  }
-  b.scrollTop=scrollY;
-  $("boardcount").textContent=`${shown} lead${shown===1?"":"s"}`;
+  const leads=STATE.leads.filter(x=>
+    (!q||String(x.name||"").toLowerCase().includes(q)||String(x.domain||"").toLowerCase().includes(q)||String(x.website||"").toLowerCase().includes(q)) &&
+    (!ms||(x.score??0)>=ms)
+  );
+  const stageLabel=st=>STAGE_LABELS[st]||st||"未分类";
+  const rows=leads.map(l=>`<tr tabindex="0" role="button" aria-label="打开客户详情：${esc(l.name)}" data-lead-id="${esc(l.id)}">
+    <td><div class="lead-name">${esc(l.name||"未命名公司")}</div><div class="lead-domain">${esc(l.domain||l.website||"—")}</div></td>
+    <td>${esc(l.location||"—")}</td>
+    <td><span class="stage-pill">${esc(stageLabel(l.stage))}</span></td>
+    <td class="score-cell">${l.score!=null?`${scoreDot(l.score)} ${l.score}/100`:"—"}</td>
+    <td>${esc(l.industry||"—")}</td>
+    <td>${l.updated_ts?new Date(l.updated_ts*1000).toLocaleDateString("zh-CN"):"—"}</td>
+  </tr>`).join("");
+  b.innerHTML=`<div class="leads-table-wrap"><table class="leads-table" aria-label="客户线索列表">
+    <thead><tr><th scope="col">公司</th><th scope="col">国家/地区</th><th scope="col">阶段</th><th scope="col">评分</th><th scope="col">行业</th><th scope="col">最近更新</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" class="table-empty">没有符合条件的客户线索</td></tr>'}</tbody>
+  </table></div>`;
+  b.querySelectorAll("tbody tr[data-lead-id]").forEach(row=>{
+    const open=()=>openDrawer(row.dataset.leadId);
+    row.addEventListener("click",open);
+    row.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}});
+  });
+  $("boardcount").textContent=`共 ${leads.length} 条线索`;
+}
+function toggleSidebar(){
+  const hidden=document.body.classList.toggle("sidebar-hidden");
+  const b=$("sideToggle");
+  if(b){b.setAttribute("aria-expanded",String(!hidden));b.title=hidden?"显示侧边栏":"隐藏侧边栏";}
+  try{localStorage.setItem("autosdr_sidebar_hidden",hidden?"1":"0");}catch{}
 }
 
 async function loadMemory(){
