@@ -29,7 +29,8 @@ def emit(agent: str, type_: str, label: str, payload: Any = None, lead_id: str |
         "payload": payload,
     }
     with db.tx() as c:
-        cur = c.execute(
+        cur = db.execute(
+            c,
             "INSERT INTO events (ts,agent,type,label,lead_id,payload) VALUES (?,?,?,?,?,?) RETURNING seq",
             (evt["ts"], agent, type_, label, lead_id, json.dumps(payload, default=str)),
         )
