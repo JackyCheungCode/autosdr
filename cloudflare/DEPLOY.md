@@ -33,11 +33,12 @@ npm test
 npx wrangler dev --config wrangler.jsonc
 ```
 
-Configure secrets locally for the Worker (never commit values):
+Configure secrets for the Worker (never commit values):
 
 ```sh
 npx wrangler secret put SUPABASE_URL --config wrangler.jsonc
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config wrangler.jsonc
+npx wrangler secret put API_PROXY_TOKEN --config wrangler.jsonc
 ```
 
 Set `FRONTEND_ORIGIN` in `cloudflare/worker/wrangler.jsonc` to the exact Pages origin before deploying. The example value is local development only.
@@ -46,7 +47,7 @@ Set `FRONTEND_ORIGIN` in `cloudflare/worker/wrangler.jsonc` to the exact Pages o
 npx wrangler deploy --config wrangler.jsonc
 ```
 
-The Worker now implements read-only `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, and `/api/leads/:id` routes using the Supabase REST API. Health performs a small real database query. These routes require the migration to be applied and server-side secrets to be configured. Write actions (pipeline run/stop, approval/rejection, company upload/text, ICP, reply simulation, booking actions), SSE, scheduler, and report/booking pages are still not migrated and return explicit 501 for `/api/*` paths not implemented.
+The Worker requires the shared `API_PROXY_TOKEN` from the Pages Function for API access and implements read-only `GET /api/health`, `/api/state`, `/api/stats`, `/api/memory`, `/api/outbox`, and `/api/leads/:id` routes using the Supabase REST API. Health performs a small real database query. These routes require the migration to be applied and server-side secrets to be configured. Write actions (pipeline run/stop, approval/rejection, company upload/text, ICP, reply simulation, booking actions), SSE, scheduler, and report/booking pages are still not migrated and return explicit 501 for `/api/*` paths not implemented.
 
 ## 3. Pages static frontend
 
@@ -56,8 +57,8 @@ Create a Cloudflare Pages project with the repository connected to GitHub:
 - Build command: leave empty for the current plain HTML frontend.
 - Build output directory: `app/static`.
 - Root directory: repository root.
-- Set the Pages environment variable `API_WORKER_URL` to the deployed Worker origin (for example, the origin shown by Wrangler; do not include an API path). The Pages Function at `functions/api/[[path]].js` proxies same-origin `/api/*` calls to that Worker, so the existing frontend URL pattern is preserved.
-- Set Worker variable `FRONTEND_ORIGIN` to the exact Pages origin for CORS. Keep preview and production origins separate.
+- Set the Pages environment variable `API_WORKER_URL` to the deployed Worker origin (for example, the origin shown by Wrangler; do not include an API path). Set a Pages **secret** named `API_PROXY_TOKEN` to the same high-entropy random value configured as the Worker secret. The Pages Function adds this token server-side; it is never sent to the browser. The Pages Function at `functions/api/[[path]].js` proxies same-origin `/api/*` calls to that Worker, so the existing frontend URL pattern is preserved.
+- Set Worker variable `FRONTEND_ORIGIN` to the exact Pages origin for CORS. Keep preview and production origins separate.\n- **Protect the Pages site with Cloudflare Access before using real lead/contact data.** The Pages proxy is not user authentication: without Access (or a future application login), anyone who can reach the site can call its same-origin API routes. CORS is not an access-control mechanism. Use test data until access protection is verified.
 - Deploy preview builds from `cloudflare-supabase` to validate static assets.
 
 The existing frontend calls FastAPI routes directly. The read-only dashboard endpoints are ported, but most mutating actions and streaming workflows still will not work against the Worker scaffold.
@@ -67,4 +68,4 @@ The existing frontend calls FastAPI routes directly. The read-only dashboard end
 - Only a read-only subset of FastAPI routes has been ported; no pipeline or outreach mutations are implemented in Worker.
 - The Python/FastAPI code now has a dual SQLite/PostgreSQL adapter; it has not been verified against a live Supabase project. The JavaScript Worker still does not serve the FastAPI business routes.
 - Scheduler, IMAP, PDF/RAG, booking, and SSE migration remain open.
-- No production deployment has been performed from this repository.
+- No production deployment has been performed from this repository.\n- The proxy token protects direct Worker calls; it does not replace end-user authentication. Cloudflare Access is required in front of Pages before exposing non-demo data.
