@@ -56,11 +56,11 @@ class DatabaseAdapterTests(unittest.TestCase):
         self.assertGreater(event["seq"], 0)
 
     def test_postgres_placeholder_conversion_ignores_quoted_text_and_comments(self):
-        sql = "SELECT '?' AS literal, col FROM t WHERE id=? -- ? ignored\\nAND name='it''s ?' /* ? */ AND other=?"
-        self.assertEqual(
-            db._convert_placeholders(sql),
-            "SELECT '?' AS literal, col FROM t WHERE id=%s -- ? ignored\\nAND name='it''s ?' /* ? */ AND other=%s",
-        )
+        sql = """SELECT '?' AS literal, col FROM t WHERE id=? -- ? ignored
+AND name='it''s ?' /* ? */ AND other=?"""
+        expected = """SELECT '?' AS literal, col FROM t WHERE id=%s -- ? ignored
+AND name='it''s ?' /* ? */ AND other=%s"""
+        self.assertEqual(db._convert_placeholders(sql), expected)
 
 
 if __name__ == "__main__":
