@@ -160,8 +160,13 @@ async function classifyReply(env, lead, contact, subject, body) {
   const content = payload.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new Error("LLM returned no classification");
   const result = JSON.parse(content);
-  if (!REPLY_CLASSIFICATION_SCHEMA.properties.category.enum.includes(result.category)) {
-    throw new Error("LLM returned invalid category");
+  const categories = REPLY_CLASSIFICATION_SCHEMA.properties.category.enum;
+  const sentiments = REPLY_CLASSIFICATION_SCHEMA.properties.sentiment.enum;
+  if (!result || typeof result !== "object" ||
+      !categories.includes(result.category) ||
+      !sentiments.includes(result.sentiment) ||
+      ["summary", "extracted_question", "next_action"].some((field) => typeof result[field] !== "string")) {
+    throw new Error("LLM returned invalid classification");
   }
   return result;
 }
