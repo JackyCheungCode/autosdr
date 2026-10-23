@@ -6,7 +6,7 @@ This folder records evidence required before calling the Cloudflare migration co
 
 | Area | Current implementation | Cloudflare target | Status |
 |---|---|---|---|
-| HTTP API | FastAPI in `app/main.py` | Worker handlers or a separately validated Python Workers deployment | Not migrated |
+| HTTP API | FastAPI in `app/main.py` | Worker handlers or a separately validated Python Workers deployment | Read-only state/stats/memory/outbox/lead-detail routes added; write actions and SSE remain unported |
 | Persistence | SQLite locally or psycopg PostgreSQL when `DATABASE_URL` is set; shared query helper converts placeholders | Supabase PostgreSQL using a server-side connection URL | Adapter implemented; local tests added, live Supabase connection not verified |
 | Follow-ups and inbox polling | APScheduler background daemon in `app/scheduler.py` | Cron Trigger + durable job processing; idempotency required | Not migrated |
 | PDF ingestion | `pypdf` and upload-to-local-disk flow | Validate package support and replace local disk with object storage or bounded in-memory processing | Not validated |
@@ -23,7 +23,7 @@ From `cloudflare/worker`:
 npm test
 ```
 
-The test suite validates only the Worker bootstrap, health status, CORS guard, and explicit 501 response for routes not yet ported. It does **not** validate a live Supabase connection or the original AutoSDR business workflow.
+The test suite validates Worker health/error handling, CORS, read-only state and stats using mocked Supabase REST responses, plus the explicit 501 response for unported routes. It does **not** validate a live Supabase project or the original AutoSDR business workflow.
 
 From the repository root, run `python -m compileall -q app` after installing `requirements.txt`. The GitHub Actions workflow performs this Python syntax/import-dependency check. It does not prove the Python packages can run inside Cloudflare Workers.
 
@@ -33,7 +33,7 @@ From the repository root, run `python -m compileall -q app` after installing `re
 - [x] Implement the dual SQLite/PostgreSQL adapter and add local regression tests for transaction rollback, placeholder conversion, event sequence, KV JSON and embedding bytes.
 - [ ] Run tests in CI and verify against a disposable Supabase project; local adapter tests do not validate a live PostgreSQL connection.
 - [ ] Test RLS and verify the service-role key is only stored as a Worker secret.
-- [ ] Port API routes and add contract tests against the existing frontend.
+- [ ] Port write/action routes and SSE, then add contract tests against the existing frontend. Read-only routes have unit tests with mocked Supabase REST responses.
 - [ ] Move scheduler work to durable scheduled jobs with retries and idempotency.
 - [ ] Verify PDF upload, RAG retrieval, SSE reconnect/keepalive, bookings, email simulation, and data persistence.
 - [ ] Deploy Pages and Worker to a staging environment and run end-to-end tests before production.
