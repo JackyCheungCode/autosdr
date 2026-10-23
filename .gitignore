@@ -10,3 +10,5 @@ uvicorn_err.log
 uvicorn_out.log
 tunnel.log
 data/*.backup
+data/*.db-wal
+data/*.db-shm
