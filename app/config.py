@@ -13,6 +13,8 @@ DATA_DIR = ROOT / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "autosdr.db"
+# When set, use Supabase PostgreSQL instead of local SQLite. Keep this server-side.
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 # LLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
