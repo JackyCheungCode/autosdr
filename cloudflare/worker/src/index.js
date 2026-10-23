@@ -88,13 +88,13 @@ const COMPANY_PROFILE_SCHEMA = {
 const DEFAULT_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema) {
-  if (!env.AI || typeof env.AI.run !== "function") {
+  if (!env.Yoo || typeof env.Yoo.run !== "function") {
     const error = new Error("ai_not_configured");
     error.code = "ai_not_configured";
     throw error;
   }
-  const model = env.AI_MODEL || DEFAULT_AI_MODEL;
-  const result = await env.AI.run(model, {
+  const model = env.Yoo_MODEL || DEFAULT_AI_MODEL;
+  const result = await env.Yoo.run(model, {
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -122,7 +122,7 @@ async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema
 }
 
 async function generateCompanyProfile(env, sourceName, sourceText) {
-  if (!env.AI || typeof env.AI.run !== "function") {
+  if (!env.Yoo || typeof env.Yoo.run !== "function") {
     const error = new Error("ai_not_configured");
     error.code = "ai_not_configured";
     throw error;
@@ -162,7 +162,7 @@ const REPLY_CLASSIFICATION_SCHEMA = {
 };
 
 async function classifyReply(env, lead, contact, subject, body) {
-  if (!env.AI || typeof env.AI.run !== "function") {
+  if (!env.Yoo || typeof env.Yoo.run !== "function") {
     const error = new Error("ai_not_configured");
     error.code = "ai_not_configured";
     throw error;
@@ -203,7 +203,7 @@ const ICP_SCHEMA = {
 };
 
 async function generateIcp(env, profile, answers) {
-  if (!env.AI || typeof env.AI.run !== "function") {
+  if (!env.Yoo || typeof env.Yoo.run !== "function") {
     const error = new Error("ai_not_configured");
     error.code = "ai_not_configured";
     throw error;
