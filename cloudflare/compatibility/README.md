@@ -30,7 +30,8 @@ From the repository root, run `python -m compileall -q app` after installing `re
 ## Required release gates
 
 - [ ] Create a disposable Supabase project and apply the migration.
-- [x] Implement the dual SQLite/PostgreSQL adapter and add local regression tests for transaction rollback, placeholder conversion, event sequence, KV JSON and embedding bytes.\n- [ ] Run tests in CI and verify against a disposable Supabase project; local adapter tests do not validate a live PostgreSQL connection.
+- [x] Implement the dual SQLite/PostgreSQL adapter and add local regression tests for transaction rollback, placeholder conversion, event sequence, KV JSON and embedding bytes.
+- [ ] Run tests in CI and verify against a disposable Supabase project; local adapter tests do not validate a live PostgreSQL connection.
 - [ ] Test RLS and verify the service-role key is only stored as a Worker secret.
 - [ ] Port API routes and add contract tests against the existing frontend.
 - [ ] Move scheduler work to durable scheduled jobs with retries and idempotency.
