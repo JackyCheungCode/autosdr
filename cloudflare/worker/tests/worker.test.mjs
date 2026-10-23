@@ -341,3 +341,50 @@ test("ICP generation uses configured LLM and persists the structured result", as
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("company text endpoint generates and persists a structured profile", async () => {
+  const originalFetch = globalThis.fetch;
+  const profile = {
+    company_name: "Example Co", tagline: "Industrial consulting", what_we_sell: "Export consulting",
+    services: [{ name: "Export consulting", description: "Support exporters", ideal_for: "Manufacturers", buying_signals: ["Expansion"], source_chunks: ["text-1"] }],
+    target_industries: ["manufacturing"],
+    case_studies: [{ client: "Example Client", industry: "manufacturing", problem: "Market entry", result: "Research delivered", source_chunks: ["text-1"] }],
+    pricing_notes: "Not specified in source", limitations: ["No guaranteed sales results"], differentiators: ["Industry experience"],
+  };
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    calls.push({ url, method: init.method || "GET", body: init.body ? JSON.parse(init.body) : null });
+    if (url.hostname === "llm.example") return Response.json({ choices: [{ message: { content: JSON.stringify(profile) } }] });
+    if (url.hostname === "example.supabase.co" && url.pathname.endsWith("/kv") && init.method === "POST") {
+      const item = JSON.parse(init.body);
+      return Response.json([{ k: item.k, v: item.v }]);
+    }
+    throw new Error("Unexpected mocked fetch: " + url.toString());
+  };
+  try {
+    const env = { ...configuredEnv, OPENAI_API_KEY: "test-llm-key", OPENAI_MODEL: "test-model", OPENAI_BASE_URL: "https://llm.example/v1" };
+    const response = await worker.fetch(request("/api/company/text", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "brochure.txt", text: "We provide export consulting to manufacturers." }),
+    }), env);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).profile, profile);
+    assert.equal(calls.filter(call => call.url.hostname === "example.supabase.co" && call.method === "POST").length, 2);
+    assert.equal(calls.some(call => call.url.hostname === "llm.example"), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("company text endpoint rejects empty text", async () => {
+  const response = await worker.fetch(request("/api/company/text", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: "   " }),
+  }), configuredEnv);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "empty_text");
+});
