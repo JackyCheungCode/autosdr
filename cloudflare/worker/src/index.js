@@ -101,7 +101,7 @@ async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema
     ],
     response_format: {
       type: "json_schema",
-      json_schema: { name: schemaName, strict: true, schema },
+      json_schema: schema,
     },
     max_tokens: 1800,
     temperature: 0.2,
