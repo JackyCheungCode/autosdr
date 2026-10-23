@@ -291,6 +291,30 @@
     .wizard{padding:24px 20px}
     .page{padding:14px}
   }
+
+  /* Mobile recovery: keep the workspace usable on narrow viewports. */
+  @media (max-width:700px){
+    html,body{height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto}
+    body{display:block}
+    #side{display:none}
+    #wrap{display:flex;min-height:100dvh;height:auto;width:100%;min-width:0}
+    #toolbar{position:sticky;top:0;z-index:30;background:var(--bg);flex-shrink:0}
+    main,main.notrace{display:flex;flex-direction:column;min-height:0;height:auto;flex:1}
+    #view{display:flex;overflow:visible;min-height:55vh;width:100%}
+    #trace{display:none!important}
+    main.notrace #view{display:flex}
+    #stats{max-width:calc(100% - 24px)}
+    #boardwrap{flex:initial;min-height:45vh;overflow:visible}
+    #board{grid-template-columns:1fr;grid-auto-rows:auto;overflow:visible;min-height:0}
+    .col{max-height:none;min-height:96px}
+    .col.isempty{display:flex}
+    #onboard,#approvals,#memory,#setup{max-width:100%;min-width:0}
+    .page,.wizard{width:100%;max-width:100%;min-width:0}
+    #tracebtn{display:none}
+    #toolbar .spacer{display:none}
+    #toolbar button{padding:7px 9px}
+  }
+
 </style>
 </head>
 <body>
