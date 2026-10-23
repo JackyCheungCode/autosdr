@@ -814,8 +814,15 @@ async function simReply(){
   fd.append("from_email",$("sim-from").value);
   fd.append("subject","Re: your email");
   fd.append("body",$("sim-body").value);
-  toast("Delivering reply…");
-  await fetch("/api/sim/reply",{method:"POST",body:fd});
+  toast("Classifying reply…");
+  const r=await fetch("/api/sim/reply",{method:"POST",body:fd});
+  const result=await r.json().catch(()=>({}));
+  if(!r.ok){
+    const messages={llm_not_configured:"Configure the LLM before classifying replies",contact_not_found:"No matching contact found",reply_processing_failed:"Reply processing failed"};
+    toast(esc(messages[result.error]||"Reply processing failed"));
+    return;
+  }
+  toast("<b>Reply classified:</b> "+esc(result.classification?.category||"other")+" — no email was sent");
   openDrawer(CUR);
 }
 
