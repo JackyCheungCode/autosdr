@@ -488,7 +488,7 @@ export default {
       const fromEmail = String(input.from_email || "").trim().toLowerCase();
       const subject = String(input.subject || "").trim().slice(0, 500);
       const body = String(input.body || "").trim();
-      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(fromEmail) || !body) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail) || !body) {
         return json({ ok: false, error: "from_email_and_body_required" }, 400, headers);
       }
       if (body.length > 10000) return json({ ok: false, error: "reply_too_large" }, 413, headers);
