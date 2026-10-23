@@ -32,7 +32,8 @@ From the repository root, run `python -m compileall -q app` after installing `re
 - [ ] Create a disposable Supabase project and apply the migration.
 - [x] Implement the dual SQLite/PostgreSQL adapter and add local regression tests for transaction rollback, placeholder conversion, event sequence, KV JSON and embedding bytes.
 - [ ] Run tests in CI and verify against a disposable Supabase project; local adapter tests do not validate a live PostgreSQL connection.
-- [ ] Test RLS and verify the service-role key is only stored as a Worker secret.\n- [ ] Configure Cloudflare Access on Pages before exposing lead/contact data; the proxy token is service-to-service protection, not user authentication.
+- [ ] Test RLS and verify the service-role key is only stored as a Worker secret.
+- [ ] Configure Cloudflare Access on Pages before exposing lead/contact data; the proxy token is service-to-service protection, not user authentication.
 - [ ] Port write/action routes and SSE, then add contract tests against the existing frontend. Read-only routes have unit tests with mocked Supabase REST responses.
 - [ ] Move scheduler work to durable scheduled jobs with retries and idempotency.
 - [ ] Verify PDF upload, RAG retrieval, SSE reconnect/keepalive, bookings, email simulation, and data persistence.
