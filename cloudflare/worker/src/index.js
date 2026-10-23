@@ -430,15 +430,68 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/api/run") {
-      // The original Python orchestrator has not been ported to Workers yet.
-      // Return an explicit capability error rather than allowing the UI to imply a run started.
-      return json({
-        ok: false,
-        error: "pipeline_not_migrated",
-        message: "客户开发后台流程尚未部署到 Cloudflare 版本。公司资料分析和 ICP 生成可用，但客户搜索、深度研究、评分和开发信流程尚未接通。此次没有启动任务，也没有生成客户。",
-        available: ["company_profile_analysis", "icp_generation", "state_read", "stats_read", "activity_stream"],
-        pending: ["lead_discovery", "lead_research", "lead_scoring", "contact_finding", "outreach"],
-      }, 501, headers);
+      try {
+        const input = await formOrJson(request);
+        const requested = Math.max(1, Math.min(3, Number(input.max_leads || 3) || 3));
+        const icp = await getKv(env, "icp", null);
+        const profile = await getKv(env, "company_profile", null);
+        if (!icp || !Array.isArray(icp.industries) || !icp.industries.length) {
+          return json({ok:false,error:"icp_required",message:"请先生成并保存 ICP。"},400,headers);
+        }
+        const query = [icp.industries.slice(0,3).join(" OR "), icp.location || "Europe", "industrial valve importer distributor company"].filter(Boolean).join(" ");
+        let provider = "";
+        let results = [];
+        if (env.TAVILY_API_KEY) {
+          provider = "tavily";
+          const response = await fetch("https://api.tavily.com/search", {
+            method:"POST", headers:{"content-type":"application/json"},
+            body:JSON.stringify({api_key:env.TAVILY_API_KEY,query,search_depth:"basic",max_results:requested,include_answer:false})
+          });
+          if (!response.ok) throw new Error("tavily_http_"+response.status);
+          const data=await response.json();
+          results=(data.results||[]).map(x=>({name:x.title||"",url:x.url||"",content:x.content||""}));
+        } else if (env.SERPER_API_KEY) {
+          provider = "serper";
+          const response = await fetch("https://google.serper.dev/search", {
+            method:"POST", headers:{"content-type":"application/json","X-API-KEY":env.SERPER_API_KEY},
+            body:JSON.stringify({q:query,num:requested})
+          });
+          if (!response.ok) throw new Error("serper_http_"+response.status);
+          const data=await response.json();
+          results=(data.organic||[]).map(x=>({name:x.title||"",url:x.link||"",content:x.snippet||""}));
+        } else {
+          return json({ok:false,error:"search_provider_not_configured",message:"未配置 Tavily 或 Serper 搜索密钥。"},503,headers);
+        }
+        const now=Date.now()/1000, saved=[];
+        for (const item of results) {
+          if (!item.name || !item.url) continue;
+          let parsed; try { parsed=new URL(item.url); } catch { continue; }
+          if (!/^https?:$/.test(parsed.protocol)) continue;
+          const domain=parsed.hostname.replace(/^www\./,"");
+          const id=crypto.randomUUID();
+          const rows=await supabaseRequest(env,"leads",{},null,{method:"POST",body:{
+            id,name:item.name.slice(0,240),domain,website:parsed.origin,
+            location:String(icp.location||"").slice(0,160),
+            industry:String((icp.industries||[]).slice(0,3).join(", ")).slice(0,240),
+            size_hint:String(icp.company_size||"").slice(0,120),
+            source:provider,stage:"discovered",score:null,score_reasons:null,
+            service:String(profile?.what_we_sell||"industrial valves").slice(0,240),
+            research:String(item.content||"").slice(0,3000),created_ts:now,updated_ts:now
+          }});
+          saved.push({id,name:item.name,domain,website:parsed.origin,source:provider});
+        }
+        await supabaseRequest(env,"events",{},null,{method:"POST",body:{
+          ts:now,agent:"discovery",type:saved.length?"success":"warning",
+          label:`Search completed via ${provider}: ${saved.length} candidate companies saved`,
+          lead_id:saved[0]?.id||null,
+          payload:JSON.stringify({provider,query,requested,received:results.length,saved:saved.length})
+        }});
+        return json({ok:true,status:"discovery_complete",provider,requested,received:results.length,saved:saved.length,leads:saved,emails_sent:0,message:saved.length?"真实搜索结果已写入客户表；尚未执行研究、评分或发送邮件。":"搜索完成，但没有可保存的有效公司结果。"},200,headers);
+      } catch (error) {
+        const msg=String(error?.message||"run_failed");
+        const code=msg.startsWith("tavily_http_")||msg.startsWith("serper_http_")?"search_provider_failed":msg.startsWith("Supabase")?"database_write_failed":"run_failed";
+        return json({ok:false,error:code,message:code==="search_provider_failed"?"搜索服务请求失败，请检查密钥权限或额度。":code==="database_write_failed"?"搜索有结果，但写入数据库失败。":"启动搜索失败；请确认 ICP、搜索密钥和数据库配置。"},502,headers);
+      }
     }
 
     if (request.method === "POST" && url.pathname === "/api/stop") {
