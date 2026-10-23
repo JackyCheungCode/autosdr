@@ -636,7 +636,8 @@ function translateStaticUi(){
       </div>
       <span class="stagebadge" id="d-stage">—</span>
       <button onclick="window.open('/report/'+CUR,'_blank')">Report</button>
-      <button onclick="advanceLead()" id="d-advance">Advance</button>
+      <button class="primary" id="d-analyze" onclick="analyzeLead()">AI 分析</button>
+      <button onclick="advanceLead()" id="d-advance">推进</button>
       <button class="ghost" onclick="closeDrawer()">✕</button>
     </div>
     <div class="dtabs" id="dtabs">
@@ -854,6 +855,8 @@ async function runPipeline(){
   const button=document.querySelector('#toolbar button.primary');
   if(button){button.disabled=true;button.textContent="Starting…";}
   try{
+    $("runstate").querySelector(".dot").className="dot live"; $("runtext").textContent="正在启动";
+    addRuntimeLog("启动","开始客户搜索任务，正在检查设置并请求启动任务…","plan");
     toast("<b>正在启动</b>：正在检查设置并请求启动任务…");
     const fd=new FormData(); fd.append("max_leads",$("maxleads")?.value||5);
     const sn=$("sendername")?.value?.trim(); if(sn) fd.append("sender_name",sn);
@@ -865,13 +868,31 @@ async function runPipeline(){
       log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">启动失败</span><div>'+esc(String(reason).slice(0,500))+'</div></div>');
       showTab("pipeline"); return;
     }
-    toast("<b>启动请求已接受</b>：请查看 Agent Activity 的新日志。");
-    showTab("pipeline");
+    toast("<b>搜索任务已完成</b>：新线索已保存，AI 分析不会自动运行。");
+    addRuntimeLog("启动",data.message||("搜索完成，新增 "+(data.saved||0)+" 条线索；AI 分析需手动启动。"),"success");
+    $("runstate").querySelector(".dot").className="dot idle"; $("runtext").textContent="搜索完成";
+    await refresh(); showTab("pipeline");
   }catch(e){
     const reason=e?.message||"网络连接失败";
+    $("runstate").querySelector(".dot").className="dot warn"; $("runtext").textContent="连接失败";
+    addRuntimeLog("网络错误",reason,"error");
     toast("<b>无法连接服务器</b>："+esc(reason));
     log.insertAdjacentHTML("beforeend",'<div class="evt error"><span class="a">网络错误</span><div>'+esc(reason)+'</div></div>');
   }finally{if(button){button.disabled=false;button.innerHTML='<svg class="ic" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>Run';}}
+}
+function addRuntimeLog(agent,label,type){
+  if(!log)return; const node=evtLine({agent,type,label,ts:Date.now()/1000});
+  log.appendChild(node); while(log.children.length>400)log.removeChild(log.firstChild); log.scrollTop=log.scrollHeight;
+}
+async function analyzeLead(){
+  if(!CUR)return; const btn=$("d-analyze"); if(btn){btn.disabled=true;btn.textContent="分析中…";}
+  addRuntimeLog("AI 分析","已手动启动当前客户的 AI 分析。","plan"); toast("正在分析当前客户…");
+  try{const r=await fetch("/api/leads/"+encodeURIComponent(CUR)+"/analyze",{method:"POST"}); const {data,raw}=await readApiResponse(r);
+    if(!r.ok)throw new Error(data.message||data.error||raw||("HTTP "+r.status));
+    addRuntimeLog("AI 分析",data.message+"；评分 "+data.score+"/100。","success"); toast("<b>AI 分析完成</b>：评分 "+esc(data.score)+"/100");
+    await refresh(); await openDrawer(CUR);
+  }catch(e){const msg=e?.message||"AI 分析失败";addRuntimeLog("AI 分析",msg,"error");toast("<b>AI 分析失败</b>："+esc(msg));}
+  finally{if(btn){btn.disabled=false;btn.textContent="AI 分析";}}
 }
 async function stopPipeline(){
   try{
@@ -1082,7 +1103,7 @@ es.onmessage=m=>{
   else if(e.type==="email"&&e.label.startsWith("LIVE")) toast("<b>Email sent</b> — "+esc(e.label.slice(12,80)));
   else if(e.type==="stage"&&e.label.includes("Meeting")) toast("<b>Meeting scheduled</b> — "+esc(e.label.split("→")[0]));
   else if(e.type==="step"&&e.label.startsWith("draft queued")) toast("<b>Outreach queued</b> for approval");
-  if(["stage","decision","email","whatsapp"].includes(e.type)) refresh();
+  if(["stage","decision","email","whatsapp","success","warning","error"].includes(e.type)) refresh();
   if(e.type==="step"&&e.label.startsWith("draft queued")) refresh();
   if(CUR&&e.lead_id===CUR&&["email","whatsapp","decision","stage"].includes(e.type)) openDrawer(CUR);
 };
