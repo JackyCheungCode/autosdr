@@ -39,10 +39,24 @@ test("health reports configuration presence without returning secret values", as
   }
 });
 
-test("unmigrated API endpoints fail explicitly rather than pretending to work", async () => {
-  const response = await worker.fetch(request("/api/run"), baseEnv);
-  assert.equal(response.status, 501);
-  assert.equal((await response.json()).error, "not_implemented");
+test("lead discovery requires a saved ICP before searching and never pretends to start", async () => {
+  const response = await worker.fetch(request("/api/run", { method: "POST" }), configuredEnv);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "icp_required");
+});
+
+test("manual AI analysis endpoint rejects unknown leads without calling AI", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input);
+    if (url.pathname.endsWith("/leads")) return Response.json([]);
+    throw new Error("AI must not run for an unknown lead");
+  };
+  try {
+    const response = await worker.fetch(request("/api/leads/missing/analyze", { method: "POST" }), configuredEnv);
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).error, "not_found");
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test("SSE stream replays recent Supabase events and emits standard event IDs", async () => {
