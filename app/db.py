@@ -90,7 +90,7 @@ def _connect_postgres():
         dsn += ("&" if "?" in dsn else "?") + "sslmode=require"
     # Autocommit keeps standalone SELECTs from leaving a shared connection in
     # an open transaction. tx() explicitly brackets multi-statement writes.
-    connection = psycopg.connect(dsn, autocommit=True, row_factory=dict_row)
+    connection = psycopg.connect(dsn, row_factory=dict_row)
     try:
         with connection.cursor() as cur:
             cur.execute("SELECT to_regclass('public.leads') AS table_name")
@@ -99,6 +99,7 @@ def _connect_postgres():
                     "Supabase schema is missing: apply "
                     "supabase/migrations/20261023000100_autosdr_initial_schema.sql first"
                 )
+        connection.commit()
     except Exception:
         connection.close()
         raise
@@ -172,10 +173,7 @@ def tx():
     """Serialize access to the shared connection and commit or roll back atomically."""
     with _lock:
         c = conn()
-        postgres = bool(DATABASE_URL)
         try:
-            if postgres:
-                c.execute("BEGIN")
             yield c
             c.commit()
         except Exception:
@@ -232,12 +230,19 @@ def update(table: str, id_: str, fields: dict):
 
 def rows(sql: str, args: tuple = ()) -> list[dict]:
     with _lock:
-        return [dict(r) for r in _execute(conn(), sql, args).fetchall()]
+        connection = conn()
+        result = [dict(r) for r in _execute(connection, sql, args).fetchall()]
+        if DATABASE_URL:
+            connection.commit()
+        return result
 
 
 def one(sql: str, args: tuple = ()) -> dict | None:
     with _lock:
-        row = _execute(conn(), sql, args).fetchone()
+        connection = conn()
+        row = _execute(connection, sql, args).fetchone()
+        if DATABASE_URL:
+            connection.commit()
         return dict(row) if row else None
 
 
