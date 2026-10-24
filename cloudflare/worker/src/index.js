@@ -101,7 +101,7 @@ async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema
       temperature: 0.2,
     });
   } else if (env.OPENAI_API_KEY) {
-    const response = await fetch(`${(env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\\/$/, "")}/chat/completions`, {
+    const response = await fetch(`${(env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\x2f$/, "")}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${env.OPENAI_API_KEY}` },
       body: JSON.stringify({
