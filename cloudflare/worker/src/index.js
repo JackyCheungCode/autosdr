@@ -141,11 +141,8 @@ async function runStructuredAi(env, systemPrompt, userPrompt, schemaName, schema
 }
 
 async function generateCompanyProfile(env, sourceName, sourceText) {
-  if (!env.Yoo || typeof env.Yoo.run !== "function") {
-    const error = new Error("ai_not_configured");
-    error.code = "ai_not_configured";
-    throw error;
-  }
+  // Use the same AI provider selection as other structured tasks: Workers AI first,
+  // with the configured OpenAI-compatible endpoint available only as a fallback.
   const chunks = [];
   for (let i = 0; i < sourceText.length; i += 7000) {
     chunks.push({ id: `text-${chunks.length + 1}`, text: sourceText.slice(i, i + 7000) });
